@@ -1,0 +1,45 @@
+{
+  "base": {
+    "max_steps": 8,
+    "n_trajectories": 598445,
+    "n_distinct_topologies": 86553,
+    "injective": false,
+    "topologies_with_multiplicity_gt1": 10952,
+    "fraction_topologies_collided": 0.12653518653310689,
+    "max_trajectories_per_topology": 687,
+    "mean_trajectories_per_topology": 6.91420285836424,
+    "multiplicity_histogram": {
+      "1": 75601,
+      "4": 2,
+      "21": 4320,
+      "22": 5040,
+      "81": 4,
+      "85": 2,
+      "141": 600,
+      "162": 720,
+      "327": 18,
+      "360": 96,
+      "408": 6,
+      "501": 120,
+      "687": 24
+    }
+  },
+  "structured": {
+    "max_steps": 8,
+    "n_trajectories": 8837,
+    "n_distinct_topologies": 33,
+    "injective": false,
+    "topologies_with_multiplicity_gt1": 32,
+    "fraction_topologies_collided": 0.9696969696969697,
+    "max_trajectories_per_topology": 408,
+    "mean_trajectories_per_topology": 267.7878787878788,
+    "multiplicity_histogram": {
+      "1": 1,
+      "4": 2,
+      "81": 4,
+      "85": 2,
+      "327": 18,
+      "408": 6
+    }
+  }
+}

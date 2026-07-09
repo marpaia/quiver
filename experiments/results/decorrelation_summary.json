@@ -1,0 +1,89 @@
+{
+  "parameter_context": {
+    "n_usable": 144,
+    "failure_correlation_distinct_minus_same": {
+      "pooled": -0.48066574627989894,
+      "ci_low": -0.5067787669508009,
+      "ci_high": -0.45455272560899695,
+      "share_in_direction": 1.0,
+      "tau2": 0.018410424649335042,
+      "i2": 0.7608774066732287,
+      "n_targets": 144
+    },
+    "portfolio_survival_diverse_minus_clustered": {
+      "pooled": 0.19960542939481143,
+      "ci_low": 0.17005655717431867,
+      "ci_high": 0.2291543016153042,
+      "share_in_direction": 0.9097222222222222,
+      "tau2": 0.03261767984076718,
+      "i2": 0.9999989054693456,
+      "n_targets": 144
+    },
+    "mean_corr_same": 0.8219929255877546,
+    "mean_corr_distinct": 0.3409815721663441,
+    "mean_survival_diverse": 0.8186381612612115,
+    "mean_survival_clustered": 0.6187036046647989
+  },
+  "resource_competition": {
+    "n_usable": 144,
+    "model_a_decorrelation": {
+      "pooled": -0.48066574627989894,
+      "ci_low": -0.5067787669508009,
+      "ci_high": -0.45455272560899695,
+      "share_in_direction": 1.0,
+      "tau2": 0.018410424649335042,
+      "i2": 0.7608774066732287,
+      "n_targets": 144
+    },
+    "within_model_decorrelation": {
+      "pooled": -0.39271363614996846,
+      "ci_low": -0.417178297911585,
+      "ci_high": -0.3682489743883519,
+      "share_in_direction": 1.0,
+      "tau2": 0.017826020207121693,
+      "i2": 0.8421585841947318,
+      "n_targets": 144
+    },
+    "portfolio_survival": {
+      "pooled": 0.1284820711472988,
+      "ci_low": 0.11468098223411684,
+      "ci_high": 0.14228316006048072,
+      "share_in_direction": 0.7152777777777778,
+      "tau2": 0.006996616354149236,
+      "i2": 0.9999898515938244,
+      "n_targets": 144
+    },
+    "mean_cross_model_fragility_r": 0.3828583188453716
+  },
+  "intrinsic_noise": {
+    "n_usable": 47,
+    "model_a_decorrelation": {
+      "pooled": -0.48735024596658444,
+      "ci_low": -0.5324423891238703,
+      "ci_high": -0.4422581028092985,
+      "share_in_direction": 1.0,
+      "tau2": 0.017811419822741953,
+      "i2": 0.7695019115719951,
+      "n_targets": 47
+    },
+    "within_model_decorrelation": {
+      "pooled": -0.10575569483637888,
+      "ci_low": -0.13397766809832337,
+      "ci_high": -0.07753372157443437,
+      "share_in_direction": 0.9148936170212766,
+      "tau2": 0.003341601681345057,
+      "i2": 0.4297151723188635,
+      "n_targets": 47
+    },
+    "portfolio_survival": {
+      "pooled": 0.25470164469430673,
+      "ci_low": 0.14273109731344646,
+      "ci_high": 0.366672192075167,
+      "share_in_direction": 0.7872340425531915,
+      "tau2": 0.15207635450120827,
+      "i2": 0.9994443807791484,
+      "n_targets": 47
+    },
+    "mean_cross_model_fragility_r": 0.06036706401593253
+  }
+}

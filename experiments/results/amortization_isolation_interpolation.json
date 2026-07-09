@@ -1,0 +1,41 @@
+{
+  "config": {
+    "split": "interpolation",
+    "seeds": 3,
+    "eval_budget": 300,
+    "tune_steps": 2,
+    "cond_sims": 960,
+    "spec_sims": 480,
+    "beta": 4.0,
+    "held_out": [
+      2,
+      5,
+      8,
+      11
+    ]
+  },
+  "trained": {
+    "conditioned_mean": 6.125,
+    "specialist_mean": 5.458333333333333,
+    "paired": {
+      "mean_diff": 0.6666666666666666,
+      "ci_low": -0.7083333333333334,
+      "ci_high": 1.9583333333333333,
+      "win_rate": 0.7916666666666666,
+      "sign_p": 0.3017578125,
+      "n": 24
+    }
+  },
+  "held_out": {
+    "conditioned_mean": 7.416666666666667,
+    "nearest_reuse_mean": 7.583333333333333,
+    "paired": {
+      "mean_diff": -0.16666666666666666,
+      "ci_low": -1.5833333333333333,
+      "ci_high": 0.9166666666666666,
+      "win_rate": 0.8333333333333334,
+      "sign_p": 0.6875,
+      "n": 12
+    }
+  }
+}

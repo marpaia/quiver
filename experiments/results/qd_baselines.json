@@ -1,0 +1,162 @@
+{
+  "config": {
+    "seeds": 10,
+    "eval_budget": 300,
+    "tune_steps": 2,
+    "train_sims": 480,
+    "beta": 4.0,
+    "target": {
+      "ec50": 1.0,
+      "dynamic_range": 100.0,
+      "direction": "any"
+    }
+  },
+  "methods": {
+    "random": {
+      "distinct_mean": 5,
+      "distinct_std": 2.1908902300206643,
+      "midway_mean": 2.7
+    },
+    "evolutionary": {
+      "distinct_mean": 13.5,
+      "distinct_std": 7.902531240052139,
+      "midway_mean": 4.6
+    },
+    "map-elites": {
+      "distinct_mean": 10.8,
+      "distinct_std": 9.431860898041277,
+      "midway_mean": 4.9
+    },
+    "novelty": {
+      "distinct_mean": 7.4,
+      "distinct_std": 3.168595903550972,
+      "midway_mean": 3.5
+    },
+    "bo": {
+      "distinct_mean": 4.3,
+      "distinct_std": 1.7349351572897473,
+      "midway_mean": 2.9
+    },
+    "gflownet": {
+      "distinct_mean": 22.2,
+      "distinct_std": 4.093897898091744,
+      "midway_mean": 10.9
+    }
+  },
+  "paired_gflownet_minus": {
+    "map-elites": {
+      "mean_diff": 11.4,
+      "ci_low": 4.4,
+      "ci_high": 17.2,
+      "win_rate": 0.9,
+      "sign_p": 0.021484375,
+      "n": 10
+    },
+    "novelty": {
+      "mean_diff": 14.8,
+      "ci_low": 11.5,
+      "ci_high": 18.3,
+      "win_rate": 1.0,
+      "sign_p": 0.001953125,
+      "n": 10
+    },
+    "bo": {
+      "mean_diff": 17.9,
+      "ci_low": 15.2,
+      "ci_high": 20.6,
+      "win_rate": 1.0,
+      "sign_p": 0.001953125,
+      "n": 10
+    },
+    "evolutionary": {
+      "mean_diff": 8.7,
+      "ci_low": 3.1,
+      "ci_high": 14.1,
+      "win_rate": 0.7,
+      "sign_p": 0.34375,
+      "n": 10
+    },
+    "random": {
+      "mean_diff": 17.2,
+      "ci_low": 14.6,
+      "ci_high": 20,
+      "win_rate": 1.0,
+      "sign_p": 0.001953125,
+      "n": 10
+    }
+  },
+  "per_seed_distinct": {
+    "random": [
+      3,
+      9,
+      3,
+      5,
+      3,
+      8,
+      6,
+      5,
+      6,
+      2
+    ],
+    "evolutionary": [
+      16,
+      17,
+      6,
+      22,
+      2,
+      22,
+      26,
+      5,
+      12,
+      7
+    ],
+    "map-elites": [
+      11,
+      11,
+      4,
+      12,
+      0,
+      14,
+      36,
+      11,
+      5,
+      4
+    ],
+    "novelty": [
+      6,
+      9,
+      3,
+      10,
+      8,
+      8,
+      13,
+      4,
+      10,
+      3
+    ],
+    "bo": [
+      4,
+      5,
+      7,
+      6,
+      1,
+      5,
+      2,
+      3,
+      5,
+      5
+    ],
+    "gflownet": [
+      25,
+      31,
+      23,
+      16,
+      21,
+      20,
+      22,
+      18,
+      20,
+      26
+    ]
+  }
+}

@@ -1,0 +1,1279 @@
+{
+  "config": {
+    "targets": 12,
+    "seeds": 10,
+    "eval_budget": 300,
+    "train_sims": 480,
+    "beta": 4.0
+  },
+  "across_targets_gfn_minus_evolutionary": {
+    "mean_diff": 2.458333333333333,
+    "ci_low": 0.5250000000000001,
+    "ci_high": 4.508333333333333,
+    "win_rate": 0.6666666666666666,
+    "sign_p": 0.75390625,
+    "n": 12
+  },
+  "per_target": [
+    {
+      "target": {
+        "ec50": 0.1,
+        "dynamic_range": 10.0,
+        "direction": "up"
+      },
+      "distinct_mean": {
+        "random": 1.9,
+        "evolutionary": 3.9,
+        "map-elites": 3.2,
+        "novelty": 2.2,
+        "bo": 1.8,
+        "gflownet": 9.1
+      },
+      "distinct_std": {
+        "random": 1.1357816691600546,
+        "evolutionary": 3.014962686336267,
+        "map-elites": 2.039607805437114,
+        "novelty": 2.3151673805580453,
+        "bo": 1.4,
+        "gflownet": 4.1340053217188775
+      },
+      "gfn_minus_evolutionary": {
+        "mean_diff": 5.2,
+        "ci_low": 2.3,
+        "ci_high": 8.8,
+        "win_rate": 0.9,
+        "sign_p": 0.021484375,
+        "n": 10
+      },
+      "per_seed_distinct": {
+        "random": [
+          1,
+          2,
+          2,
+          1,
+          3,
+          1,
+          4,
+          0,
+          2,
+          3
+        ],
+        "evolutionary": [
+          2,
+          3,
+          4,
+          3,
+          5,
+          0,
+          8,
+          10,
+          4,
+          0
+        ],
+        "map-elites": [
+          2,
+          3,
+          7,
+          1,
+          4,
+          2,
+          6,
+          4,
+          3,
+          0
+        ],
+        "novelty": [
+          2,
+          1,
+          2,
+          0,
+          0,
+          0,
+          4,
+          2,
+          3,
+          8
+        ],
+        "bo": [
+          0,
+          1,
+          1,
+          1,
+          1,
+          2,
+          3,
+          1,
+          5,
+          3
+        ],
+        "gflownet": [
+          4,
+          4,
+          10,
+          4,
+          12,
+          18,
+          11,
+          9,
+          10,
+          9
+        ]
+      }
+    },
+    {
+      "target": {
+        "ec50": 0.1,
+        "dynamic_range": 10.0,
+        "direction": "down"
+      },
+      "distinct_mean": {
+        "random": 4.3,
+        "evolutionary": 9.7,
+        "map-elites": 7.7,
+        "novelty": 2.8,
+        "bo": 4.4,
+        "gflownet": 7.4
+      },
+      "distinct_std": {
+        "random": 0.9,
+        "evolutionary": 8.075270893288968,
+        "map-elites": 5.74543296888929,
+        "novelty": 2.9257477676655586,
+        "bo": 1.7435595774162693,
+        "gflownet": 2.3323807579381204
+      },
+      "gfn_minus_evolutionary": {
+        "mean_diff": -2.3,
+        "ci_low": -7.2,
+        "ci_high": 2.5,
+        "win_rate": 0.5,
+        "sign_p": 1.0,
+        "n": 10
+      },
+      "per_seed_distinct": {
+        "random": [
+          5,
+          5,
+          3,
+          4,
+          4,
+          4,
+          5,
+          6,
+          4,
+          3
+        ],
+        "evolutionary": [
+          11,
+          5,
+          6,
+          1,
+          20,
+          3,
+          10,
+          15,
+          26,
+          0
+        ],
+        "map-elites": [
+          9,
+          2,
+          7,
+          0,
+          12,
+          3,
+          7,
+          11,
+          21,
+          5
+        ],
+        "novelty": [
+          6,
+          2,
+          1,
+          1,
+          6,
+          0,
+          2,
+          9,
+          0,
+          1
+        ],
+        "bo": [
+          4,
+          8,
+          5,
+          4,
+          3,
+          6,
+          2,
+          5,
+          2,
+          5
+        ],
+        "gflownet": [
+          2,
+          7,
+          11,
+          7,
+          9,
+          7,
+          6,
+          7,
+          10,
+          8
+        ]
+      }
+    },
+    {
+      "target": {
+        "ec50": 0.1,
+        "dynamic_range": 100.0,
+        "direction": "up"
+      },
+      "distinct_mean": {
+        "random": 1.1,
+        "evolutionary": 10.9,
+        "map-elites": 8.7,
+        "novelty": 2.3,
+        "bo": 0.8,
+        "gflownet": 20.3
+      },
+      "distinct_std": {
+        "random": 0.8306623862918074,
+        "evolutionary": 6.236184731067546,
+        "map-elites": 6.116371473349211,
+        "novelty": 1.5524174696260025,
+        "bo": 0.9797958971132712,
+        "gflownet": 3.661966684720111
+      },
+      "gfn_minus_evolutionary": {
+        "mean_diff": 9.4,
+        "ci_low": 5.5,
+        "ci_high": 13.3,
+        "win_rate": 1.0,
+        "sign_p": 0.00390625,
+        "n": 10
+      },
+      "per_seed_distinct": {
+        "random": [
+          0,
+          3,
+          1,
+          0,
+          1,
+          2,
+          1,
+          1,
+          1,
+          1
+        ],
+        "evolutionary": [
+          2,
+          18,
+          16,
+          17,
+          11,
+          7,
+          20,
+          10,
+          5,
+          3
+        ],
+        "map-elites": [
+          20,
+          14,
+          6,
+          6,
+          0,
+          10,
+          17,
+          7,
+          4,
+          3
+        ],
+        "novelty": [
+          0,
+          4,
+          4,
+          1,
+          1,
+          4,
+          3,
+          0,
+          3,
+          3
+        ],
+        "bo": [
+          0,
+          1,
+          0,
+          0,
+          0,
+          2,
+          1,
+          1,
+          0,
+          3
+        ],
+        "gflownet": [
+          15,
+          22,
+          23,
+          17,
+          19,
+          17,
+          22,
+          24,
+          27,
+          17
+        ]
+      }
+    },
+    {
+      "target": {
+        "ec50": 0.1,
+        "dynamic_range": 100.0,
+        "direction": "down"
+      },
+      "distinct_mean": {
+        "random": 9,
+        "evolutionary": 14.9,
+        "map-elites": 9,
+        "novelty": 6.7,
+        "bo": 4.5,
+        "gflownet": 18.2
+      },
+      "distinct_std": {
+        "random": 3.1622776601683795,
+        "evolutionary": 9.148223871331528,
+        "map-elites": 3.872983346207417,
+        "novelty": 3.132091952673165,
+        "bo": 1.8027756377319946,
+        "gflownet": 1.7776388834631178
+      },
+      "gfn_minus_evolutionary": {
+        "mean_diff": 3.3,
+        "ci_low": -2.8,
+        "ci_high": 8.6,
+        "win_rate": 0.6,
+        "sign_p": 0.75390625,
+        "n": 10
+      },
+      "per_seed_distinct": {
+        "random": [
+          7,
+          11,
+          12,
+          10,
+          5,
+          14,
+          8,
+          11,
+          9,
+          3
+        ],
+        "evolutionary": [
+          16,
+          19,
+          5,
+          7,
+          20,
+          21,
+          18,
+          6,
+          34,
+          3
+        ],
+        "map-elites": [
+          11,
+          17,
+          7,
+          5,
+          11,
+          11,
+          10,
+          10,
+          5,
+          3
+        ],
+        "novelty": [
+          8,
+          6,
+          6,
+          7,
+          13,
+          3,
+          10,
+          8,
+          4,
+          2
+        ],
+        "bo": [
+          4,
+          8,
+          4,
+          4,
+          6,
+          4,
+          2,
+          7,
+          3,
+          3
+        ],
+        "gflownet": [
+          19,
+          17,
+          21,
+          18,
+          19,
+          18,
+          21,
+          17,
+          17,
+          15
+        ]
+      }
+    },
+    {
+      "target": {
+        "ec50": 1.0,
+        "dynamic_range": 10.0,
+        "direction": "up"
+      },
+      "distinct_mean": {
+        "random": 0.8,
+        "evolutionary": 3,
+        "map-elites": 1.8,
+        "novelty": 0.3,
+        "bo": 0.6,
+        "gflownet": 1.8
+      },
+      "distinct_std": {
+        "random": 0.7483314773547883,
+        "evolutionary": 2.9664793948382653,
+        "map-elites": 2.4413111231467406,
+        "novelty": 0.458257569495584,
+        "bo": 0.6633249580710799,
+        "gflownet": 1.5362291495737217
+      },
+      "gfn_minus_evolutionary": {
+        "mean_diff": -1.2,
+        "ci_low": -2.7,
+        "ci_high": 0.3,
+        "win_rate": 0.5,
+        "sign_p": 0.453125,
+        "n": 10
+      },
+      "per_seed_distinct": {
+        "random": [
+          0,
+          1,
+          1,
+          1,
+          2,
+          0,
+          2,
+          0,
+          1,
+          0
+        ],
+        "evolutionary": [
+          1,
+          2,
+          0,
+          3,
+          0,
+          9,
+          5,
+          3,
+          7,
+          0
+        ],
+        "map-elites": [
+          2,
+          0,
+          0,
+          0,
+          1,
+          6,
+          1,
+          0,
+          7,
+          1
+        ],
+        "novelty": [
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          1
+        ],
+        "bo": [
+          1,
+          0,
+          1,
+          0,
+          0,
+          0,
+          2,
+          1,
+          0,
+          1
+        ],
+        "gflownet": [
+          1,
+          0,
+          0,
+          3,
+          3,
+          4,
+          0,
+          2,
+          4,
+          1
+        ]
+      }
+    },
+    {
+      "target": {
+        "ec50": 1.0,
+        "dynamic_range": 10.0,
+        "direction": "down"
+      },
+      "distinct_mean": {
+        "random": 0.7,
+        "evolutionary": 5.6,
+        "map-elites": 2.8,
+        "novelty": 0.8,
+        "bo": 1.9,
+        "gflownet": 11.2
+      },
+      "distinct_std": {
+        "random": 0.6403124237432849,
+        "evolutionary": 5.370288632839021,
+        "map-elites": 2.4819347291981715,
+        "novelty": 0.9797958971132712,
+        "bo": 1.7,
+        "gflownet": 3.1559467676119
+      },
+      "gfn_minus_evolutionary": {
+        "mean_diff": 5.6,
+        "ci_low": 2.1,
+        "ci_high": 8.8,
+        "win_rate": 0.8,
+        "sign_p": 0.1796875,
+        "n": 10
+      },
+      "per_seed_distinct": {
+        "random": [
+          1,
+          1,
+          1,
+          1,
+          0,
+          2,
+          1,
+          0,
+          0,
+          0
+        ],
+        "evolutionary": [
+          0,
+          10,
+          2,
+          12,
+          0,
+          15,
+          5,
+          2,
+          10,
+          0
+        ],
+        "map-elites": [
+          1,
+          3,
+          0,
+          4,
+          0,
+          6,
+          7,
+          0,
+          5,
+          2
+        ],
+        "novelty": [
+          0,
+          0,
+          0,
+          1,
+          1,
+          2,
+          1,
+          0,
+          3,
+          0
+        ],
+        "bo": [
+          1,
+          5,
+          1,
+          0,
+          2,
+          5,
+          1,
+          2,
+          0,
+          2
+        ],
+        "gflownet": [
+          12,
+          17,
+          9,
+          12,
+          9,
+          11,
+          16,
+          6,
+          9,
+          11
+        ]
+      }
+    },
+    {
+      "target": {
+        "ec50": 1.0,
+        "dynamic_range": 100.0,
+        "direction": "up"
+      },
+      "distinct_mean": {
+        "random": 1.1,
+        "evolutionary": 4.5,
+        "map-elites": 3.4,
+        "novelty": 1.3,
+        "bo": 0.6,
+        "gflownet": 7.3
+      },
+      "distinct_std": {
+        "random": 1.5132745950421556,
+        "evolutionary": 2.9410882339705484,
+        "map-elites": 2.1071307505705477,
+        "novelty": 1.004987562112089,
+        "bo": 0.8,
+        "gflownet": 1.5524174696260025
+      },
+      "gfn_minus_evolutionary": {
+        "mean_diff": 2.8,
+        "ci_low": 0.4,
+        "ci_high": 5.1,
+        "win_rate": 0.8,
+        "sign_p": 0.1796875,
+        "n": 10
+      },
+      "per_seed_distinct": {
+        "random": [
+          0,
+          4,
+          0,
+          0,
+          1,
+          1,
+          0,
+          0,
+          4,
+          1
+        ],
+        "evolutionary": [
+          4,
+          6,
+          3,
+          5,
+          0,
+          10,
+          1,
+          2,
+          7,
+          7
+        ],
+        "map-elites": [
+          3,
+          4,
+          0,
+          5,
+          0,
+          7,
+          5,
+          4,
+          4,
+          2
+        ],
+        "novelty": [
+          0,
+          2,
+          2,
+          1,
+          0,
+          2,
+          3,
+          0,
+          2,
+          1
+        ],
+        "bo": [
+          2,
+          1,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          2
+        ],
+        "gflownet": [
+          6,
+          9,
+          9,
+          5,
+          9,
+          6,
+          8,
+          6,
+          9,
+          6
+        ]
+      }
+    },
+    {
+      "target": {
+        "ec50": 1.0,
+        "dynamic_range": 100.0,
+        "direction": "down"
+      },
+      "distinct_mean": {
+        "random": 4,
+        "evolutionary": 8.8,
+        "map-elites": 8.6,
+        "novelty": 6.1,
+        "bo": 4.4,
+        "gflownet": 15.9
+      },
+      "distinct_std": {
+        "random": 1.7888543819998317,
+        "evolutionary": 11.443775600735973,
+        "map-elites": 8.788629017087933,
+        "novelty": 2.808914381037628,
+        "bo": 1.9078784028338913,
+        "gflownet": 3.753664875824692
+      },
+      "gfn_minus_evolutionary": {
+        "mean_diff": 7.1,
+        "ci_low": -2.1,
+        "ci_high": 14.4,
+        "win_rate": 0.7,
+        "sign_p": 0.34375,
+        "n": 10
+      },
+      "per_seed_distinct": {
+        "random": [
+          3,
+          5,
+          3,
+          5,
+          2,
+          7,
+          6,
+          5,
+          3,
+          1
+        ],
+        "evolutionary": [
+          7,
+          15,
+          0,
+          5,
+          0,
+          25,
+          34,
+          0,
+          2,
+          0
+        ],
+        "map-elites": [
+          13,
+          10,
+          3,
+          8,
+          0,
+          12,
+          31,
+          8,
+          1,
+          0
+        ],
+        "novelty": [
+          6,
+          7,
+          1,
+          9,
+          8,
+          6,
+          10,
+          4,
+          8,
+          2
+        ],
+        "bo": [
+          8,
+          3,
+          7,
+          6,
+          2,
+          4,
+          3,
+          3,
+          3,
+          5
+        ],
+        "gflownet": [
+          18,
+          14,
+          20,
+          11,
+          21,
+          9,
+          18,
+          19,
+          15,
+          14
+        ]
+      }
+    },
+    {
+      "target": {
+        "ec50": 10.0,
+        "dynamic_range": 10.0,
+        "direction": "up"
+      },
+      "distinct_mean": {
+        "random": 0,
+        "evolutionary": 0.1,
+        "map-elites": 0.3,
+        "novelty": 0,
+        "bo": 0,
+        "gflownet": 0
+      },
+      "distinct_std": {
+        "random": 0.0,
+        "evolutionary": 0.3,
+        "map-elites": 0.6403124237432849,
+        "novelty": 0.0,
+        "bo": 0.0,
+        "gflownet": 0.0
+      },
+      "gfn_minus_evolutionary": {
+        "mean_diff": -0.1,
+        "ci_low": -0.3,
+        "ci_high": 0,
+        "win_rate": 0.9,
+        "sign_p": 1.0,
+        "n": 10
+      },
+      "per_seed_distinct": {
+        "random": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "evolutionary": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0
+        ],
+        "map-elites": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          2,
+          0,
+          0,
+          0,
+          1
+        ],
+        "novelty": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "bo": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "gflownet": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "target": {
+        "ec50": 10.0,
+        "dynamic_range": 10.0,
+        "direction": "down"
+      },
+      "distinct_mean": {
+        "random": 0,
+        "evolutionary": 0,
+        "map-elites": 0,
+        "novelty": 0,
+        "bo": 0,
+        "gflownet": 0
+      },
+      "distinct_std": {
+        "random": 0.0,
+        "evolutionary": 0.0,
+        "map-elites": 0.0,
+        "novelty": 0.0,
+        "bo": 0.0,
+        "gflownet": 0.0
+      },
+      "gfn_minus_evolutionary": {
+        "mean_diff": 0,
+        "ci_low": 0,
+        "ci_high": 0,
+        "win_rate": 1.0,
+        "sign_p": 1.0,
+        "n": 10
+      },
+      "per_seed_distinct": {
+        "random": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "evolutionary": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "map-elites": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "novelty": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "bo": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "gflownet": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "target": {
+        "ec50": 10.0,
+        "dynamic_range": 100.0,
+        "direction": "up"
+      },
+      "distinct_mean": {
+        "random": 0.1,
+        "evolutionary": 0.3,
+        "map-elites": 0.3,
+        "novelty": 0,
+        "bo": 0,
+        "gflownet": 0
+      },
+      "distinct_std": {
+        "random": 0.3,
+        "evolutionary": 0.6403124237432849,
+        "map-elites": 0.458257569495584,
+        "novelty": 0.0,
+        "bo": 0.0,
+        "gflownet": 0.0
+      },
+      "gfn_minus_evolutionary": {
+        "mean_diff": -0.3,
+        "ci_low": -0.7,
+        "ci_high": 0,
+        "win_rate": 0.8,
+        "sign_p": 0.5,
+        "n": 10
+      },
+      "per_seed_distinct": {
+        "random": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0
+        ],
+        "evolutionary": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          2,
+          0
+        ],
+        "map-elites": [
+          1,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          1,
+          0
+        ],
+        "novelty": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "bo": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "gflownet": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "target": {
+        "ec50": 10.0,
+        "dynamic_range": 100.0,
+        "direction": "down"
+      },
+      "distinct_mean": {
+        "random": 0,
+        "evolutionary": 0,
+        "map-elites": 0,
+        "novelty": 0,
+        "bo": 0,
+        "gflownet": 0
+      },
+      "distinct_std": {
+        "random": 0.0,
+        "evolutionary": 0.0,
+        "map-elites": 0.0,
+        "novelty": 0.0,
+        "bo": 0.0,
+        "gflownet": 0.0
+      },
+      "gfn_minus_evolutionary": {
+        "mean_diff": 0,
+        "ci_low": 0,
+        "ci_high": 0,
+        "win_rate": 1.0,
+        "sign_p": 1.0,
+        "n": 10
+      },
+      "per_seed_distinct": {
+        "random": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "evolutionary": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "map-elites": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "novelty": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "bo": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "gflownet": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    }
+  ]
+}

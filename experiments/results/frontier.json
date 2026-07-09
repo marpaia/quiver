@@ -1,0 +1,68 @@
+{
+  "config": {
+    "seeds": 10,
+    "eval_budget": 300,
+    "tune_steps": 2,
+    "train_sims": 480,
+    "diag_samples": 500,
+    "betas": [
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0
+    ],
+    "target": {
+      "ec50": 1.0,
+      "dynamic_range": 100.0,
+      "direction": "any"
+    }
+  },
+  "beta": {
+    "0.5": {
+      "distinct_mean": 25.2,
+      "distinct_std": 3.280243893371345,
+      "score_mean": 0.5822725208569722,
+      "score_std": 0.019310344822157176,
+      "norm_entropy": 1.0,
+      "top_mode_mass": 0.010436195179629773,
+      "tv_to_reward": 0.013492831018616678
+    },
+    "1.0": {
+      "distinct_mean": 21.4,
+      "distinct_std": 4.586937976471886,
+      "score_mean": 0.5848631688062811,
+      "score_std": 0.014012538987186279,
+      "norm_entropy": 1.0,
+      "top_mode_mass": 0.00996954639740388,
+      "tv_to_reward": 0.02966049659672359
+    },
+    "2.0": {
+      "distinct_mean": 22.4,
+      "distinct_std": 4.7791212581394085,
+      "score_mean": 0.5886500303720127,
+      "score_std": 0.016188008872422072,
+      "norm_entropy": 1.0,
+      "top_mode_mass": 0.010356816657044767,
+      "tv_to_reward": 0.06790363035745053
+    },
+    "4.0": {
+      "distinct_mean": 18.9,
+      "distinct_std": 4.988987873306569,
+      "score_mean": 0.5943638916597975,
+      "score_std": 0.017729650832803368,
+      "norm_entropy": 1.0,
+      "top_mode_mass": 0.011139813423220436,
+      "tv_to_reward": 0.1450109364696528
+    },
+    "8.0": {
+      "distinct_mean": 18.1,
+      "distinct_std": 2.3853720883753127,
+      "score_mean": 0.6040572837022228,
+      "score_std": 0.01729653999311951,
+      "norm_entropy": 1.0,
+      "top_mode_mass": 0.012021323816117964,
+      "tv_to_reward": 0.2542359351306842
+    }
+  }
+}

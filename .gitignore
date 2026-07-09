@@ -1,0 +1,16 @@
+# Environments
+.venv/
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+# Run outputs (checkpoints, logs, cached simulations)
+runs/
+*.jsonl
+
+# Personal planning artifact — strategy, not status; never committed
+PLAN.md

@@ -1,0 +1,12 @@
+{
+  "config": {
+    "population": 30,
+    "seeds": 3,
+    "tune_steps": 2,
+    "pass": 0.5
+  },
+  "passers": 88,
+  "sustained": 88,
+  "sustained_fraction": 1.0,
+  "mean_envelope_ratio": 0.9882734501588143
+}

@@ -1,0 +1,41 @@
+{
+  "config": {
+    "split": "extrapolation",
+    "seeds": 3,
+    "eval_budget": 300,
+    "tune_steps": 2,
+    "cond_sims": 960,
+    "spec_sims": 480,
+    "beta": 4.0,
+    "held_out": [
+      8,
+      9,
+      10,
+      11
+    ]
+  },
+  "trained": {
+    "conditioned_mean": 8.875,
+    "specialist_mean": 9.875,
+    "paired": {
+      "mean_diff": -1,
+      "ci_low": -3.1666666666666665,
+      "ci_high": 0.9583333333333334,
+      "win_rate": 0.4583333333333333,
+      "sign_p": 0.5234670639038086,
+      "n": 24
+    }
+  },
+  "held_out": {
+    "conditioned_mean": 0,
+    "nearest_reuse_mean": 0,
+    "paired": {
+      "mean_diff": 0,
+      "ci_low": 0,
+      "ci_high": 0,
+      "win_rate": 1.0,
+      "sign_p": 1.0,
+      "n": 12
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "config": {
+    "seeds": 5,
+    "eval_budget": 300,
+    "tune_steps": 2,
+    "train_sims": 480,
+    "beta": 4.0,
+    "penalty": 0.25,
+    "target": {
+      "ec50": 1.0,
+      "dynamic_range": 100.0,
+      "direction": "any"
+    }
+  },
+  "arms": {
+    "ungated": {
+      "distinct_mean": 23.2,
+      "distinct_std": 4.915282290977803,
+      "certified_distinct_mean": 23.2,
+      "cert_frac_of_passers": 1.0,
+      "cert_frac_all_sampled": 1.0,
+      "mean_score": 0.6041586808352549
+    },
+    "gated": {
+      "distinct_mean": 23.2,
+      "distinct_std": 4.915282290977803,
+      "certified_distinct_mean": 23.2,
+      "cert_frac_of_passers": 1.0,
+      "cert_frac_all_sampled": 1.0,
+      "mean_score": 0.6041586808352549
+    }
+  }
+}

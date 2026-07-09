@@ -1,0 +1,70 @@
+[project]
+name = "quiver"
+version = "0.0.1"
+description = "Machine learning for the diverse design of gene-regulatory circuits under a simulation objective."
+requires-python = ">=3.11"
+# torch is core: the constructive GFlowNet and its training loop are the heart of quiver. huggingface_hub
+# is core too: trained designers save, load, and publish through the Hub via its ModelHubMixin.
+dependencies = ["numpy>=1.26", "torch>=2.2", "huggingface_hub>=0.23"]
+
+[project.optional-dependencies]
+# The simulation objective: LOICA compiles a genetic network to ODEs and runs a dose-response assay.
+# Pinned to the upstream commit that replaces the removed pandas DataFrame.append with pd.concat.
+sim = [
+    "loica @ git+https://github.com/RudgeLab/LOICA.git@c2b65b30938f5f67a4fa215689efbb418510c422",
+    "matplotlib>=3.8",
+    "pandas>=2.0",
+]
+# Characterization-data grounding: the shared data model for measured and simulated dose-responses.
+# A local sibling checkout; quiver's reference module is duck-typed and does not import it directly.
+data = ["flapjack-data @ file:///Users/marpaia/git/marpaia/flapjack-data"]
+dev = ["pytest>=8", "black>=24", "isort>=5.13", "flake8>=7", "mypy>=1.10", "pre-commit>=3.7"]
+
+[project.scripts]
+quiver = "quiver.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["quiver"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.black]
+line-length = 120
+target-version = ["py311"]
+
+[tool.isort]
+profile = "black"
+line_length = 120
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_ignores = true
+# The experiment scripts import their siblings (_common, _gfn, decorrelation_scaled) by bare name, as they
+# are run from the experiments directory; this puts that directory on mypy's module search path.
+mypy_path = "experiments"
+
+[[tool.mypy.overrides]]
+module = ["loica.*", "matplotlib.*", "pandas.*", "torch.*", "huggingface_hub.*"]
+ignore_missing_imports = true
+
+# The learned sampler builds on torch (untyped here); its correctness is covered by an integration test
+# rather than strict typing.
+[[tool.mypy.overrides]]
+module = ["quiver.learn.*"]
+ignore_errors = true
+
+# The Bayesian-optimization baseline is numpy-heavy; numpy's ufunc stubs return `Any` under strict mode, so
+# its linear algebra trips no-any-return. Its correctness is covered by tests rather than strict typing.
+[[tool.mypy.overrides]]
+module = ["quiver.generate.bo"]
+ignore_errors = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["sim: integration test that requires the LOICA simulation objective (the `sim` extra)"]
