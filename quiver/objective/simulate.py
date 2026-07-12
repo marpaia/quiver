@@ -1,10 +1,8 @@
 """The simulation objective's engine: build a GRN's LOICA network in process, run a dose-response assay,
 and return the reporter dynamics as a typed result.
 
-LOICA is imported lazily and lives behind the ``sim`` extra, so the package imports without it; only a
-call to :func:`simulate` needs it installed. The GRN's operators are wired from the graph edges exactly
-as :mod:`quiver.grn` defines them: an operator's inputs are the species feeding it (ordered by port) and
-its outputs are the species it produces.
+The GRN's operators are wired from the graph edges exactly as :mod:`quiver.grn` defines them: an operator's
+inputs are the species feeding it (ordered by port) and its outputs are the species it produces.
 """
 
 from __future__ import annotations
@@ -12,6 +10,8 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from typing import Any
+
+import loica as lc
 
 from quiver.grn import GRN, Node
 
@@ -71,12 +71,6 @@ def long_run(sustained_growth: float = 0.4, hours: float = 120.0, n_measurements
     return SimConfig(n_measurements=n_measurements, interval=hours / n_measurements, sustained_growth=sustained_growth)
 
 
-def _require_loica() -> Any:
-    from quiver._extras import require
-
-    return require("loica", "sim")
-
-
 def _compile(lc: Any, grn: GRN) -> tuple[Any, dict[str, Any]]:
     """Build the LOICA ``GeneticNetwork`` for ``grn`` and the map from GRN node id to LOICA object.
 
@@ -101,14 +95,12 @@ def to_loica(grn: GRN) -> Any:
 
     Each GRN species becomes a LOICA ``Regulator``, ``Reporter``, or ``Supplement`` and each operator a
     LOICA ``Receiver``/``Hill1``/``Hill2``/``Source``/``Sum``, wired by the GRN's edges. The result is a
-    standard LOICA object: draw it, inspect its operators, or hand it to the rest of a LOICA workflow.
-    Requires the ``sim`` extra (LOICA)."""
-    return _compile(_require_loica(), grn)[0]
+    standard LOICA object: draw it, inspect its operators, or hand it to the rest of a LOICA workflow."""
+    return _compile(lc, grn)[0]
 
 
 def simulate(grn: GRN, config: SimConfig | None = None) -> SimulationResult:
     """Compile ``grn`` to a LOICA genetic network, run a dose-response assay, and return the traces."""
-    lc = _require_loica()
     cfg = config or SimConfig()
     y0, ymax, um, lag = cfg.biomass
     network, objects = _compile(lc, grn)

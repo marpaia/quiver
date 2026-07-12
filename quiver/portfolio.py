@@ -10,14 +10,23 @@ Hugging Face Hub.
 
 from __future__ import annotations
 
+import json
 import random
 from dataclasses import dataclass
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator
 
+import torch
 from huggingface_hub import ModelHubMixin
 
+from quiver.generate import evolutionary_search_designs, random_search_designs, tune_best
 from quiver.grn import GRN
+from quiver.learn.amortized import sample_conditioned, train_conditioned
+from quiver.learn.gflownet import PolicyNet, sample_terminals, train
+from quiver.learn.gnn import sample_terminals as sample_gnn
+from quiver.learn.gnn import train as train_gnn
+from quiver.objective import buildable_objective, dose_response_match, to_loica
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -66,9 +75,7 @@ class Portfolio:
         return [score for _, score in self.designs]
 
     def networks(self) -> list[Any]:
-        """Compile every circuit to a LOICA ``GeneticNetwork`` (needs the ``sim`` extra)."""
-        from quiver.objective import to_loica
-
+        """Compile every circuit to a LOICA ``GeneticNetwork``."""
         return [to_loica(grn) for grn, _ in self.designs]
 
 
@@ -107,8 +114,6 @@ def design(
     time, train a :class:`Designer` once and reuse it.
     """
     if objective is None and robust:
-        from quiver.objective import buildable_objective
-
         objective = buildable_objective(
             behavior, ensemble=ensemble, jitter=jitter, seed=seed, burden_capacity=burden_capacity
         )
@@ -151,8 +156,6 @@ def _generate(
 ) -> list[Design]:
     name = method.lower()
     if name in ("evolutionary", "evo"):
-        from quiver.generate import evolutionary_search_designs
-
         return evolutionary_search_designs(
             behavior,
             budget=budget,
@@ -162,8 +165,6 @@ def _generate(
             objective=objective,
         )
     if name == "random":
-        from quiver.generate import random_search_designs
-
         return random_search_designs(
             behavior,
             budget=budget,
@@ -173,9 +174,6 @@ def _generate(
             objective=objective,
         )
     if name in ("gflownet", "gfn"):
-        from quiver.generate import tune_best
-        from quiver.learn.gflownet import sample_terminals, train
-
         policy = train(behavior, beta=beta, seed=seed, objective=objective)
         rng = random.Random(seed)
         return [
@@ -183,10 +181,6 @@ def _generate(
             for grn in sample_terminals(policy, budget, seed=seed)
         ]
     if name == "gnn":
-        from quiver.generate import tune_best
-        from quiver.learn.gnn import sample_terminals as sample_gnn
-        from quiver.learn.gnn import train as train_gnn
-
         gnn_policy = train_gnn(behavior, beta=beta, seed=seed, objective=objective)
         rng = random.Random(seed)
         return [
@@ -228,8 +222,6 @@ class Designer(ModelHubMixin):  # type: ignore[misc]
         seed: int = 0,
     ) -> "Designer":
         """Train a target-conditioned policy across ``targets`` (uses ``steps * batch`` simulations, once)."""
-        from quiver.learn.amortized import train_conditioned
-
         policy = train_conditioned(list(targets), steps=steps, batch=batch, beta=beta, max_steps=max_steps, seed=seed)
         return cls(policy=policy, max_steps=max_steps)
 
@@ -243,10 +235,6 @@ class Designer(ModelHubMixin):  # type: ignore[misc]
         seed: int = 0,
     ) -> Portfolio:
         """Design a portfolio for ``target`` by sampling the trained policy; no retraining."""
-        from quiver.generate import tune_best
-        from quiver.learn.amortized import sample_conditioned
-        from quiver.objective import dose_response_match
-
         behavior = dose_response_match(target)
         rng = random.Random(seed)
         candidates = sample_conditioned(self.policy, target, budget, max_steps=self.max_steps, seed=seed)
@@ -255,10 +243,6 @@ class Designer(ModelHubMixin):  # type: ignore[misc]
 
     def _save_pretrained(self, save_directory: Path) -> None:
         """Write the policy weights and architecture into ``save_directory`` (called by save_pretrained)."""
-        import json
-
-        import torch
-
         torch.save(self.policy.state_dict(), save_directory / "policy.pt")
         layers = list(self.policy.net)
         config = {
@@ -284,12 +268,6 @@ class Designer(ModelHubMixin):  # type: ignore[misc]
         **kwargs: Any,
     ) -> "Designer":
         """Rebuild a designer from a resolved local directory (called by from_pretrained after download)."""
-        import json
-
-        import torch
-
-        from quiver.learn.gflownet import PolicyNet
-
         directory = Path(model_id)
         config = json.loads((directory / "config.json").read_text())
         policy = PolicyNet(in_features=config["in_features"], hidden=config["hidden"], n_actions=config["n_actions"])
@@ -299,8 +277,6 @@ class Designer(ModelHubMixin):  # type: ignore[misc]
 
 
 def _quiver_version() -> str:
-    from importlib.metadata import PackageNotFoundError, version
-
     try:
         return version("quiver")
     except PackageNotFoundError:

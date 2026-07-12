@@ -1821,47 +1821,38 @@ name = "quiver"
 version = "0.0.1"
 source = { editable = "." }
 dependencies = [
-    { name = "huggingface-hub" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-    { name = "torch" },
-]
-
-[package.optional-dependencies]
-data = [
-    { name = "flapjack-data" },
-]
-dev = [
     { name = "black" },
     { name = "flake8" },
+    { name = "flapjack-data" },
+    { name = "huggingface-hub" },
     { name = "isort" },
-    { name = "mypy" },
-    { name = "pre-commit" },
-    { name = "pytest" },
-]
-sim = [
     { name = "loica" },
     { name = "matplotlib" },
+    { name = "mypy" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "pandas" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "torch" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "black", marker = "extra == 'dev'", specifier = ">=24" },
-    { name = "flake8", marker = "extra == 'dev'", specifier = ">=7" },
-    { name = "flapjack-data", marker = "extra == 'data'", directory = "../flapjack-data" },
+    { name = "black", specifier = ">=24" },
+    { name = "flake8", specifier = ">=7" },
+    { name = "flapjack-data", directory = "../flapjack-data" },
     { name = "huggingface-hub", specifier = ">=0.23" },
-    { name = "isort", marker = "extra == 'dev'", specifier = ">=5.13" },
-    { name = "loica", marker = "extra == 'sim'", git = "https://github.com/RudgeLab/LOICA.git?rev=c2b65b30938f5f67a4fa215689efbb418510c422" },
-    { name = "matplotlib", marker = "extra == 'sim'", specifier = ">=3.8" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
+    { name = "isort", specifier = ">=5.13" },
+    { name = "loica", git = "https://github.com/RudgeLab/LOICA.git?rev=c2b65b30938f5f67a4fa215689efbb418510c422" },
+    { name = "matplotlib", specifier = ">=3.8" },
+    { name = "mypy", specifier = ">=1.10" },
     { name = "numpy", specifier = ">=1.26" },
-    { name = "pandas", marker = "extra == 'sim'", specifier = ">=2.0" },
-    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.7" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
+    { name = "pandas", specifier = ">=2.0" },
+    { name = "pre-commit", specifier = ">=3.7" },
+    { name = "pytest", specifier = ">=8" },
     { name = "torch", specifier = ">=2.2" },
 ]
-provides-extras = ["sim", "data", "dev"]
 
 [[package]]
 name = "rdflib"

@@ -180,13 +180,24 @@ that meet it in simulation, scored for robustness and buildability rather than t
 parameterization. A chosen topology is a concrete part list and set of regulatory links to assemble and run
 on a plate reader, and the `quiver.objective.reference` module scores a candidate against a measured
 dose-response curve using the same shape metric whether that curve is simulated or measured, reading
-measurements through the Flapjack characterization data model (needs the `data` extra).
+measurements through the Flapjack characterization data model.
 
 ## Install
 
+Quiver is not on PyPI yet, so install it from its Git remote. There are no optional extras: one install
+pulls every dependency, including LOICA, torch, and the learned samplers.
+
 ```bash
-pip install quiver            # core library
-pip install "quiver[sim]"     # + the LOICA simulation objective
-pip install "quiver[learn]"   # + the GFlowNet and graph policies (torch)
-pip install "quiver[data]"    # + measured-curve grounding through flapjack-data
+pip install "quiver @ git+https://github.com/marpaia/quiver.git"
 ```
+
+For development, clone the repository and install it in editable mode:
+
+```bash
+git clone git@github.com:marpaia/quiver.git
+cd quiver
+pip install -e .
+```
+
+The `flapjack-data` dependency resolves to a local sibling checkout, so keep it alongside `quiver` (at
+`../flapjack-data`) when installing.
