@@ -1,8 +1,8 @@
 """Render the discovery-curve figure: cumulative distinct high-scoring topologies vs. simulation budget
 for random, evolutionary, and GFlowNet search, as mean with a ±std band over seeds.
 
-Shares the single-target configuration of ``gflownet_single_target.py`` so the figure's endpoints match the
-reported distinct-design counts. Writes a PDF (and a JSON of the plotted means/stds) to the output path.
+Shares the single-target configuration of ``qd_baselines.py`` so the figure's endpoints match the reported
+distinct-design counts. Writes a PDF (and a JSON of the plotted means/stds) to the output path.
 
 Run: ``uv run python experiments/discovery_figure.py [out.pdf]`` (needs the ``sim`` and ``learn`` extras
 plus matplotlib).
