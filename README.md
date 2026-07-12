@@ -67,7 +67,7 @@ simulation. Pass `robust=False` for the cheaper single-simulation shape match, o
 score robustness alone.
 
 Parameter tuning is clamped to kinetics real parts achieve. The Hill coefficient stays in `[1, 5]` and the
-achievable dynamic range stays under about `3e3`, ranges read from a corpus of characterized Cello response
+achievable dynamic range stays under about `3e3`, ranges taken from a corpus of characterized Cello response
 functions (`data/cello`). This stops the search from hitting a target with a cooperativity or fold change no
 promoter reaches.
 

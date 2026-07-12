@@ -3,7 +3,7 @@
 Unbounded parameter search can match a target dose-response with kinetics no real part achieves ("fit on
 paper"): a runaway Hill coefficient, or a dynamic range beyond anything measured. These bounds clamp a tuned
 parameterization to the *dimensionless* envelope of characterized parts, the Hill coefficient and the
-achievable dynamic range, read from the Cello UCF corpus (``research/quiver/data/cello``): Hill ``n`` spans
+achievable dynamic range, derived from the Cello UCF corpus (``data/cello``): Hill ``n`` spans
 1.15 to 4.48 and dynamic range reaches ~3.4e3 across 63 gates and 21 sensors.
 
 Only unit-free quantities are clamped. Absolute expression levels and the half-max ``K`` are in the parts'
