@@ -19,7 +19,13 @@ from quiver.objective.resource import (
     resource_battery,
     score_under_resource,
 )
-from quiver.objective.score import ObjectiveFn, robustness, robustness_objective, score_once
+from quiver.objective.score import (
+    ObjectiveFn,
+    buildable_objective,
+    robustness,
+    robustness_objective,
+    score_once,
+)
 from quiver.objective.simulate import SimConfig, SimulationResult, dose_sweep, long_run, simulate, to_loica
 from quiver.objective.stress import Context, apply_context, context_battery, score_under_context
 from quiver.objective.target import (
@@ -40,6 +46,7 @@ __all__ = [
     "TargetResponse",
     "apply_context",
     "apply_resource_competition",
+    "buildable_objective",
     "burden_fraction",
     "circuit_demand",
     "context_battery",

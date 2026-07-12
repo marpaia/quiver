@@ -14,34 +14,61 @@ import random
 from quiver.generate.search import mutate
 from quiver.generate.topology import random_sensor, structural_mutate
 from quiver.grn import GRN
-from quiver.objective import Behavior, SimConfig, score_once
+from quiver.objective import Behavior, ObjectiveFn, SimConfig, score_once
 
 Scored = tuple[str, float]
 Design = tuple[GRN, float]
 
 
-def tune_best(grn: GRN, behavior: Behavior, rng: random.Random, steps: int, config: SimConfig | None = None) -> Design:
+def tune_best(
+    grn: GRN,
+    behavior: Behavior,
+    rng: random.Random,
+    steps: int,
+    config: SimConfig | None = None,
+    *,
+    objective: ObjectiveFn | None = None,
+) -> Design:
     """A small local parameter search: the best-scoring parameterization found over ``steps`` mutations,
     returned with its score. ``config`` selects the simulation mode, the default dose-response window for
-    sensors, or a long constant-growth window (`long_run`) for autonomous dynamics like oscillation."""
-    best = score_once(grn, behavior, config)
+    sensors, or a long constant-growth window (`long_run`) for autonomous dynamics like oscillation.
+
+    ``objective`` overrides how a candidate is scored: given, it is a circuit-to-scalar (e.g.
+    :func:`quiver.objective.buildable_objective`, robustness discounted by burden) evaluated directly;
+    absent, a single ``score_once`` shape-match at the candidate's parameters."""
+    evaluate = objective if objective is not None else (lambda candidate: score_once(candidate, behavior, config))
+    best = evaluate(grn)
     current = best_grn = grn
     for _ in range(steps):
         candidate = mutate(current, rng, jitter=0.4)
-        score = score_once(candidate, behavior, config)
+        score = evaluate(candidate)
         if score > best:
             current = best_grn = candidate
             best = score
     return best_grn, best
 
 
-def tune_score(grn: GRN, behavior: Behavior, rng: random.Random, steps: int, config: SimConfig | None = None) -> float:
+def tune_score(
+    grn: GRN,
+    behavior: Behavior,
+    rng: random.Random,
+    steps: int,
+    config: SimConfig | None = None,
+    *,
+    objective: ObjectiveFn | None = None,
+) -> float:
     """The best score over ``steps`` parameter mutations, :func:`tune_best` without the tuned circuit."""
-    return tune_best(grn, behavior, rng, steps, config)[1]
+    return tune_best(grn, behavior, rng, steps, config, objective=objective)[1]
 
 
 def random_search_designs(
-    behavior: Behavior, *, budget: int, tune_steps: int = 4, seed: int = 0, max_regulators: int = 4
+    behavior: Behavior,
+    *,
+    budget: int,
+    tune_steps: int = 4,
+    seed: int = 0,
+    max_regulators: int = 4,
+    objective: ObjectiveFn | None = None,
 ) -> list[Design]:
     """Random search keeping each candidate's tuned circuit, not only its hash and score."""
     rng = random.Random(seed)
@@ -49,7 +76,7 @@ def random_search_designs(
     out: list[Design] = []
     for _ in range(max(1, budget // per)):
         grn = random_sensor(rng, max_regulators=max_regulators)
-        out.append(tune_best(grn, behavior, rng, tune_steps))
+        out.append(tune_best(grn, behavior, rng, tune_steps, objective=objective))
     return out
 
 
@@ -64,7 +91,14 @@ def random_search(
 
 
 def evolutionary_search_designs(
-    behavior: Behavior, *, budget: int, tune_steps: int = 4, seed: int = 0, pop_size: int = 12, max_regulators: int = 4
+    behavior: Behavior,
+    *,
+    budget: int,
+    tune_steps: int = 4,
+    seed: int = 0,
+    pop_size: int = 12,
+    max_regulators: int = 4,
+    objective: ObjectiveFn | None = None,
 ) -> list[Design]:
     """Evolutionary search keeping each evaluated candidate's tuned circuit, not only its hash and score.
 
@@ -77,7 +111,7 @@ def evolutionary_search_designs(
 
     def evaluate(grn: GRN) -> float:
         nonlocal evals
-        tuned, score = tune_best(grn, behavior, rng, tune_steps)
+        tuned, score = tune_best(grn, behavior, rng, tune_steps, objective=objective)
         evals += per
         stream.append((tuned, score))
         return score

@@ -22,7 +22,7 @@ from quiver.grn import GRN
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from quiver.objective import Behavior, TargetResponse
+    from quiver.objective import Behavior, ObjectiveFn, TargetResponse
 
 Design = tuple[GRN, float]
 
@@ -82,16 +82,36 @@ def design(
     seed: int = 0,
     max_regulators: int = 4,
     beta: float = 4.0,
+    robust: bool = True,
+    ensemble: int = 8,
+    jitter: float = 0.3,
+    burden_capacity: float | None = 500.0,
+    objective: "ObjectiveFn | None" = None,
 ) -> Portfolio:
     """Design a portfolio of distinct, high-scoring circuits for ``behavior``.
 
-    ``method`` selects the generator: ``"gflownet"`` (default, the diversity-seeking learned sampler) trains
-    a policy for this behavior and samples a broad portfolio from it; ``"evolutionary"`` and ``"random"`` are
-    non-learned baselines. ``budget`` is the simulation budget spent generating candidates; ``threshold`` is
-    the minimum score a circuit must clear to enter the portfolio; ``beta`` tunes the GFlowNet reward
-    exponent (higher sharpens toward the best circuits, lower spreads mass more evenly). To design many
-    targets without retraining each time, train a :class:`Designer` once and reuse it.
+    ``method`` selects the generator: ``"gflownet"`` (default, the diversity-seeking learned sampler with an
+    MLP-over-features policy) trains a policy for this behavior and samples a broad portfolio from it;
+    ``"gnn"`` is the same sampler with a graph-neural-network policy over the circuit graph
+    (:mod:`quiver.learn.gnn`); ``"evolutionary"`` and ``"random"`` are non-learned baselines. ``budget`` is
+    the generation budget; ``threshold`` is the minimum score a circuit
+    must clear to enter the portfolio; ``beta`` tunes the GFlowNet reward exponent (higher sharpens toward the
+    best circuits, lower spreads mass more evenly).
+
+    By default the search optimizes a *buildability-aware* objective (:func:`quiver.objective.buildable_objective`):
+    the target behavior's robustness over an ``ensemble`` of perturbed parameterizations, discounted by the
+    metabolic ``burden`` its topology imposes. This is the dense signal the search follows, and it is what the
+    portfolio's scores and ``threshold`` filter are read against. Set ``robust=False`` for the cheaper
+    single-simulation shape-match (one simulation per candidate instead of ``ensemble``), or pass a custom
+    ``objective`` (a circuit-to-scalar) to override entirely. To design many targets without retraining each
+    time, train a :class:`Designer` once and reuse it.
     """
+    if objective is None and robust:
+        from quiver.objective import buildable_objective
+
+        objective = buildable_objective(
+            behavior, ensemble=ensemble, jitter=jitter, seed=seed, burden_capacity=burden_capacity
+        )
     raw = _generate(
         behavior,
         method=method,
@@ -100,6 +120,7 @@ def design(
         seed=seed,
         max_regulators=max_regulators,
         beta=beta,
+        objective=objective,
     )
     return _portfolio_from(raw, threshold)
 
@@ -126,28 +147,53 @@ def _generate(
     seed: int,
     max_regulators: int,
     beta: float,
+    objective: "ObjectiveFn | None" = None,
 ) -> list[Design]:
     name = method.lower()
     if name in ("evolutionary", "evo"):
         from quiver.generate import evolutionary_search_designs
 
         return evolutionary_search_designs(
-            behavior, budget=budget, tune_steps=tune_steps, seed=seed, max_regulators=max_regulators
+            behavior,
+            budget=budget,
+            tune_steps=tune_steps,
+            seed=seed,
+            max_regulators=max_regulators,
+            objective=objective,
         )
     if name == "random":
         from quiver.generate import random_search_designs
 
         return random_search_designs(
-            behavior, budget=budget, tune_steps=tune_steps, seed=seed, max_regulators=max_regulators
+            behavior,
+            budget=budget,
+            tune_steps=tune_steps,
+            seed=seed,
+            max_regulators=max_regulators,
+            objective=objective,
         )
     if name in ("gflownet", "gfn"):
         from quiver.generate import tune_best
         from quiver.learn.gflownet import sample_terminals, train
 
-        policy = train(behavior, beta=beta, seed=seed)
+        policy = train(behavior, beta=beta, seed=seed, objective=objective)
         rng = random.Random(seed)
-        return [tune_best(grn, behavior, rng, tune_steps) for grn in sample_terminals(policy, budget, seed=seed)]
-    raise ValueError(f"unknown method {method!r}; choose 'evolutionary', 'random', or 'gflownet'")
+        return [
+            tune_best(grn, behavior, rng, tune_steps, objective=objective)
+            for grn in sample_terminals(policy, budget, seed=seed)
+        ]
+    if name == "gnn":
+        from quiver.generate import tune_best
+        from quiver.learn.gnn import sample_terminals as sample_gnn
+        from quiver.learn.gnn import train as train_gnn
+
+        gnn_policy = train_gnn(behavior, beta=beta, seed=seed, objective=objective)
+        rng = random.Random(seed)
+        return [
+            tune_best(grn, behavior, rng, tune_steps, objective=objective)
+            for grn in sample_gnn(gnn_policy, budget, seed=seed)
+        ]
+    raise ValueError(f"unknown method {method!r}; choose 'evolutionary', 'random', 'gflownet', or 'gnn'")
 
 
 class Designer(ModelHubMixin):  # type: ignore[misc]

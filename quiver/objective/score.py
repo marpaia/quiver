@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import replace
-from typing import Callable, cast
+from typing import Callable, Sequence, cast
 
 from quiver.grn import GRN, ParamValue
 from quiver.objective.behavior import Behavior
@@ -58,6 +58,50 @@ def robustness_objective(
 
     def objective(grn: GRN) -> float:
         return robustness(grn, behavior, config=config, ensemble=ensemble, jitter=jitter, seed=seed)
+
+    return objective
+
+
+def buildable_objective(
+    behavior: Behavior,
+    *,
+    config: SimConfig | None = None,
+    ensemble: int = 8,
+    jitter: float = 0.3,
+    seed: int = 0,
+    burden_capacity: float | None = 500.0,
+    noise_seeds: Sequence[int] | None = None,
+) -> ObjectiveFn:
+    """The default *buildability-aware* design objective: how robustly a circuit realizes the target
+    behavior, discounted by the metabolic burden its topology imposes and, optionally, its fragility to
+    intrinsic noise. This is the dense signal the search follows, so a design is rewarded for a *buildable*
+    realization of the target rather than a single lucky parameterization.
+
+    Terms, multiplied into a score in ``[0, 1]``:
+
+    - **Robustness**, the mean detector score over ``ensemble`` log-normally perturbed parameterizations
+      (:func:`robustness`); the primary term.
+    - **Burden**, a discount of ``1 - burden_fraction(grn, burden_capacity)``
+      (:func:`quiver.objective.resource.burden_fraction`): a cheap analytic penalty that grows with the
+      circuit's total expression demand, so deeper, higher-expression cascades are penalized *without any
+      extra simulation*. ``burden_capacity=None`` disables it.
+    - **Noise** (opt-in via ``noise_seeds``), a further discount by the mean detector score over stochastic
+      realizations (:func:`quiver.objective.noise.score_under_noise`); off by default because the Gillespie
+      path is expensive.
+    """
+
+    def objective(grn: GRN) -> float:
+        score = robustness(grn, behavior, config=config, ensemble=ensemble, jitter=jitter, seed=seed)
+        if burden_capacity is not None:
+            from quiver.objective.resource import burden_fraction
+
+            score *= 1.0 - burden_fraction(grn, burden_capacity)
+        if noise_seeds:
+            from quiver.objective.noise import score_under_noise
+
+            noise = sum(score_under_noise(grn, behavior, s, config=config) for s in noise_seeds)
+            score *= noise / len(noise_seeds)
+        return score
 
     return objective
 

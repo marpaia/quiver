@@ -9,6 +9,7 @@ import random
 from dataclasses import replace
 from typing import Iterator, cast
 
+from quiver.generate.realizable import clamp_realizable
 from quiver.grn import GRN, Edge, Node, ParamValue, default_params
 
 
@@ -41,7 +42,8 @@ def mutate(grn: GRN, rng: random.Random, *, jitter: float = 0.3) -> GRN:
     if not with_params:
         return grn
     target = rng.choice(with_params)
-    params = {key: _scale(value, rng, jitter) for key, value in target.params.items()}
+    scaled = {key: _scale(value, rng, jitter) for key, value in target.params.items()}
+    params = clamp_realizable(target.kind, scaled)
     nodes = tuple(replace(node, params=params) if node.id == target.id else node for node in grn.nodes)
     return replace(grn, nodes=nodes)
 

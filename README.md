@@ -104,39 +104,57 @@ LOICA `Receiver` that expresses the first transcription factor, which drives a c
 promoters (alternating repression and activation) terminating at the `GFP` `Reporter`. Depth is the
 structural axis — each extra relay stage shifts the effective switch point — so a shallow cascade and a deep
 one hit the same EC50 by different routes. Three distinct members that clear the threshold, drawn as their
-LOICA wiring (`--` activation, `-.-` repression):
+full LOICA wiring: round nodes are the inducer (a `Supplement`) and the reporter (a `Reporter`), plain boxes
+the transcription-factor `Regulator`s, and slanted boxes the LOICA operators — a `Receiver` that senses the
+inducer and the `Hill1` regulated promoters between stages. Each operator is fed by the regulator that
+controls it (`--` activation, `-.-` repression) and `expresses` the species it produces.
 
 A minimal two-stage relay (score ≈ 0.87):
 
 ```mermaid
 flowchart LR
-  aTc((aTc)) -- induces --> TF1
-  TF1 -. represses .-> TF2
-  TF2 -- activates --> GFP([GFP])
+  aTc((aTc)) -- senses --> Rc[/Receiver/]
+  Rc -- expresses --> TF1
+  TF1 -. represses .-> P1[/Hill1/]
+  P1 -- expresses --> TF2
+  TF2 -- activates --> P2[/Hill1/]
+  P2 -- expresses --> GFP([GFP])
 ```
 
 A four-stage cascade that shifts the switch point (score ≈ 0.91):
 
 ```mermaid
 flowchart LR
-  aTc((aTc)) -- induces --> TF1
-  TF1 -. represses .-> TF2
-  TF2 -- activates --> TF3
-  TF3 -. represses .-> TF4
-  TF4 -- activates --> GFP([GFP])
+  aTc((aTc)) -- senses --> Rc[/Receiver/]
+  Rc -- expresses --> TF1
+  TF1 -. represses .-> P1[/Hill1/]
+  P1 -- expresses --> TF2
+  TF2 -- activates --> P2[/Hill1/]
+  P2 -- expresses --> TF3
+  TF3 -. represses .-> P3[/Hill1/]
+  P3 -- expresses --> TF4
+  TF4 -- activates --> P4[/Hill1/]
+  P4 -- expresses --> GFP([GFP])
 ```
 
 A six-stage cascade (score ≈ 0.59):
 
 ```mermaid
 flowchart LR
-  aTc((aTc)) -- induces --> TF1
-  TF1 -. represses .-> TF2
-  TF2 -- activates --> TF3
-  TF3 -. represses .-> TF4
-  TF4 -- activates --> TF5
-  TF5 -. represses .-> TF6
-  TF6 -- activates --> GFP([GFP])
+  aTc((aTc)) -- senses --> Rc[/Receiver/]
+  Rc -- expresses --> TF1
+  TF1 -. represses .-> P1[/Hill1/]
+  P1 -- expresses --> TF2
+  TF2 -- activates --> P2[/Hill1/]
+  P2 -- expresses --> TF3
+  TF3 -. represses .-> P3[/Hill1/]
+  P3 -- expresses --> TF4
+  TF4 -- activates --> P4[/Hill1/]
+  P4 -- expresses --> TF5
+  TF5 -. represses .-> P5[/Hill1/]
+  P5 -- expresses --> TF6
+  TF6 -- activates --> P6[/Hill1/]
+  P6 -- expresses --> GFP([GFP])
 ```
 
 Building only the textbook circuit would pin you to _its_ threshold and dynamic range rather than the ones

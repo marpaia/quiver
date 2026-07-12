@@ -22,7 +22,7 @@ from quiver.generate import tune_score
 from quiver.gfn.env import ACTIONS, apply_action, available_actions
 from quiver.grn import GRN, is_operator
 from quiver.learn._core import rollout, vargrad_step
-from quiver.objective import Behavior, score_once
+from quiver.objective import Behavior, ObjectiveFn, score_once
 
 nn = torch.nn
 
@@ -75,14 +75,19 @@ def train(
     max_steps: int = 8,
     seed: int = 0,
     gate: Callable[[GRN], float] | None = None,
+    objective: ObjectiveFn | None = None,
 ) -> PolicyNet:
     """Train a policy to sample topologies in proportion to ``reward ** beta`` (VarGrad). Uses
-    ``steps * batch`` simulations.
+    ``steps * batch`` reward evaluations.
+
+    ``objective`` sets the reward: given, it is a circuit-to-scalar (e.g.
+    :func:`quiver.objective.buildable_objective`, robustness discounted by burden) evaluated per candidate;
+    absent, the bare ``score_once`` shape-match. Note a robustness objective costs ``ensemble`` simulations
+    per evaluation, so training simulation count scales accordingly.
 
     ``gate`` optionally multiplies each candidate's reward by a topology-dependent factor before tempering,
     steering the policy toward topologies a structural certificate favors (see
-    :func:`quiver.objective.certificate.monotone_gate`). With ``gate=None`` the reward is the bare
-    simulation score.
+    :func:`quiver.objective.certificate.monotone_gate`).
     """
     torch.manual_seed(seed)
     rng = random.Random(seed)
@@ -93,7 +98,7 @@ def train(
         log_rewards = []
         for _ in range(batch):
             grn, log_prob = _sample_trajectory(policy, rng, max_steps)
-            reward = score_once(grn, behavior)
+            reward = objective(grn) if objective is not None else score_once(grn, behavior)
             if gate is not None:
                 reward *= gate(grn)
             log_probs.append(log_prob)
