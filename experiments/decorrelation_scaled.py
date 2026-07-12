@@ -9,7 +9,7 @@ bootstrap of the hardened version; the headline statistic is now a **DerSimonian
 interval** pooling the per-target effects by their precision, plus a forest plot of the per-target
 distribution. Each target is analyzed independently, so the manifold is swept in parallel across targets.
 
-Run: ``uv run python experiments/decorrelation_scaled.py`` (``sim`` extra). Scale with the environment,
+Run: ``uv run python experiments/decorrelation_scaled.py``. Scale with the environment,
 e.g. ``N_TARGETS=20 uv run python experiments/decorrelation_scaled.py`` for the sanity pass.
 """
 

@@ -17,7 +17,7 @@ from quiver.gfn.structured_env import STRUCTURED_ACTIONS, apply_structured_actio
 from quiver.grn import GRN
 from quiver.learn._core import rollout, vargrad_step
 from quiver.learn.gflownet import PolicyNet, features
-from quiver.objective import Behavior, score_once
+from quiver.objective import Behavior, ObjectiveFn, score_once
 
 _ACTION_INDEX = {name: index for index, name in enumerate(STRUCTURED_ACTIONS)}
 
@@ -50,9 +50,16 @@ def train(
     floor: float = 1e-3,
     max_steps: int = 8,
     seed: int = 0,
+    objective: ObjectiveFn | None = None,
 ) -> PolicyNet:
     """Train a structure-controlling policy to sample topologies in proportion to ``reward ** beta``
-    (VarGrad). Uses ``steps * batch`` simulations."""
+    (VarGrad). Uses ``steps * batch`` reward evaluations.
+
+    ``objective`` sets the reward: given, it is a circuit-to-scalar (e.g.
+    :func:`quiver.objective.buildable_objective`, robustness discounted by burden) evaluated per candidate;
+    absent, the bare ``score_once`` shape-match. This matches the signature of
+    :func:`quiver.learn.gnn.train`, so the MLP and graph policies are a head-to-head architecture
+    comparison under an identical reward."""
     torch.manual_seed(seed)
     rng = random.Random(seed)
     policy = structured_policy()
@@ -62,7 +69,7 @@ def train(
         log_rewards = []
         for _ in range(batch):
             grn, log_prob = _sample_trajectory(policy, rng, max_steps)
-            reward = score_once(grn, behavior)
+            reward = objective(grn) if objective is not None else score_once(grn, behavior)
             log_probs.append(log_prob)
             log_rewards.append(beta * torch.log(torch.tensor(max(reward, 0.0) + floor)))
         vargrad_step(optimizer, log_probs, log_rewards)

@@ -7,7 +7,7 @@ target, trains a fresh single-target GFlowNet per target (the same per-target fo
 get), and reports the GFlowNet-minus-evolutionary advantage both within each target (paired over seeds) and
 across targets (a sign test over the per-target mean advantages).
 
-Run: ``uv run python experiments/qd_baselines_multitarget.py`` (needs the ``sim`` extra; torch is core).
+Run: ``uv run python experiments/qd_baselines_multitarget.py``.
 Knobs: ``SEEDS`` (default 10). The run is SEEDS x len(grid) GFlowNet trainings, so ``SEEDS=5`` halves it.
 """
 

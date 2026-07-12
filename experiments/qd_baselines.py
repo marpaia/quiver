@@ -11,7 +11,7 @@ The differentiator the GFlowNet keeps even against a strong quality-diversity ba
 QD and BO methods are run per target, while the GFlowNet is trained once and serves a distribution of
 targets. This experiment isolates the per-target diversity comparison.
 
-Run: ``uv run python experiments/qd_baselines.py`` (needs the ``sim`` and ``learn`` extras).
+Run: ``uv run python experiments/qd_baselines.py``.
 """
 
 from __future__ import annotations

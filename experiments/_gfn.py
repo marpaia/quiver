@@ -1,4 +1,4 @@
-"""The experiment protocol's binding of the library GFlowNet discovery stream (needs the ``learn`` extra).
+"""The experiment protocol's binding of the library GFlowNet discovery stream.
 
 :func:`quiver.learn.gflownet.discovery_stream` is the reusable train-then-sample-then-score pipeline;
 this binds it to the shared experiment knobs (:mod:`_common`) so the single-target, quality-diversity, and

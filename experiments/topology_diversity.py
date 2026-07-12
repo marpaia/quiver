@@ -6,7 +6,7 @@ feedforward circuits) to confirm the two things a learned sampler needs: the top
 (non-enumerable), and it still carries a graded, multimodal objective (many distinct topologies hit the
 target to varying degrees).
 
-Run: ``uv run python experiments/topology_diversity.py`` (needs the ``sim`` extra installed).
+Run: ``uv run python experiments/topology_diversity.py``.
 """
 
 from __future__ import annotations

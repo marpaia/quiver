@@ -13,6 +13,7 @@ from quiver.generate.optimize import (
     tune_score,
 )
 from quiver.generate.qd import map_elites, novelty_search
+from quiver.generate.realizable import is_realizable
 from quiver.generate.search import example_inducible, mutate, proposals
 from quiver.generate.topology import (
     diverse_topologies,
@@ -28,6 +29,7 @@ __all__ = [
     "evolutionary_search_designs",
     "example_inducible",
     "gp_ucb_search",
+    "is_realizable",
     "map_elites",
     "mutate",
     "mutual_repression_toggle",

@@ -13,7 +13,7 @@ way. This experiment adds the controls that separate amortization (H1) from samp
   conditioned policy only matched nearest-neighbor reuse, its "generalization" would be interpolation by
   proximity, not a learned target-to-design map.
 
-Run: ``uv run python experiments/amortization_isolation.py`` (needs the ``sim`` and ``learn`` extras).
+Run: ``uv run python experiments/amortization_isolation.py``.
 """
 
 from __future__ import annotations

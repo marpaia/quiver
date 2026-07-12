@@ -5,7 +5,7 @@ Run knobs are read from the environment with canonical defaults, so a large run 
 ``WORKERS`` selects the default (all cores but two). The sensor target grid and the discovery-metric
 wrappers (:func:`portfolio`, :func:`distinct`) are shared so the single-target and amortization experiments
 score portfolios identically. The GFlowNet stream builder lives in :mod:`experiments._gfn` (it needs torch);
-this module stays torch-free so the search-only experiments import it without the ``learn`` extra.
+this module stays torch-free so the search-only experiments import it without pulling in torch.
 """
 
 from __future__ import annotations

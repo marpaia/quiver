@@ -10,7 +10,7 @@ that the diverse and clustered portfolios also match on ``marginal_pass_rate`` (
 per-condition held-out pass rate). The residual gap is then attributable to decorrelation rather than base
 rate.
 
-Run: ``uv run python experiments/decorrelation_matched.py`` (``sim`` extra). Shares the scale knobs of
+Run: ``uv run python experiments/decorrelation_matched.py``. Shares the scale knobs of
 ``decorrelation_scaled`` (``N_TARGETS``, ``MAX_REGULATORS``, ``CORPUS_SEEDS``); ``PR_TOL`` sets the pass-rate
 match tolerance (default 0.05).
 """

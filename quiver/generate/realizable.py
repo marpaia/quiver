@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import cast
 
-from quiver.grn import NodeKind, ParamValue
+from quiver.grn import GRN, NodeKind, ParamValue
 
 # Realizable Hill cooperativity, from the Cello corpus (observed 1.15..4.48), with slight headroom.
 HILL_N_RANGE: tuple[float, float] = (1.0, 5.0)
@@ -62,3 +62,11 @@ def clamp_realizable(kind: NodeKind, params: dict[str, ParamValue]) -> dict[str,
     if "alpha" in out:
         out["alpha"] = _cap_dynamic_range(out["alpha"])
     return out
+
+
+def is_realizable(grn: GRN) -> bool:
+    """Whether every node's dimensionless kinetics already sit inside the realizable envelope, i.e.
+    :func:`clamp_realizable` is a no-op on the whole circuit. Because tuning clamps as it mutates, delivered
+    designs are realizable by construction; this is the check that confirms it and flags any design whose
+    stated parameters fall outside the envelope."""
+    return all(clamp_realizable(node.kind, node.params) == node.params for node in grn.nodes)

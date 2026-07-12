@@ -12,7 +12,7 @@ Over a manifold of targets we report, pooled by DerSimonian--Laird random effect
   often a design that survives every model-A condition still fails under model B, evidence that B is a
   genuinely different geometry, so a hedge that holds under both is hedging model misspecification itself.
 
-Run: ``uv run python experiments/decorrelation_crossmodel.py`` (``sim`` extra); ``N_TARGETS=20 ...`` to sanity-check.
+Run: ``uv run python experiments/decorrelation_crossmodel.py``; ``N_TARGETS=20 ...`` to sanity-check.
 """
 
 from __future__ import annotations

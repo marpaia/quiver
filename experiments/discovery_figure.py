@@ -4,8 +4,7 @@ for random, evolutionary, and GFlowNet search, as mean with a ±std band over se
 Shares the single-target configuration of ``qd_baselines.py`` so the figure's endpoints match the reported
 distinct-design counts. Writes a PDF (and a JSON of the plotted means/stds) to the output path.
 
-Run: ``uv run python experiments/discovery_figure.py [out.pdf]`` (needs the ``sim`` and ``learn`` extras
-plus matplotlib).
+Run: ``uv run python experiments/discovery_figure.py [out.pdf]``.
 """
 
 from __future__ import annotations

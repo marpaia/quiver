@@ -1,0 +1,127 @@
+{
+  "config": {
+    "seeds": 10,
+    "betas": [
+      1.0,
+      4.0
+    ],
+    "deliver_samples": 100,
+    "tune_steps": 2,
+    "train_evals": 480,
+    "objective": "buildable_objective(ensemble=8, burden_capacity=500)",
+    "pass_threshold": 0.5,
+    "target": {
+      "ec50": 1.0,
+      "dynamic_range": 100.0,
+      "direction": "any"
+    }
+  },
+  "arms": {
+    "mlp": {
+      "beta=1.0": {
+        "distinct_mean": 11.7,
+        "distinct_std": 1.9519221295943134,
+        "peak_mean": 0.7699465047178435,
+        "meanscore_mean": 0.5901760983275877,
+        "burden_mean": 0.5001907054004588,
+        "regulators_mean": 3.9714285714285715,
+        "realizable_frac": 1.0,
+        "per_seed_distinct": [
+          9,
+          14,
+          11,
+          12,
+          10,
+          14,
+          15,
+          10,
+          12,
+          10
+        ]
+      },
+      "beta=4.0": {
+        "distinct_mean": 11,
+        "distinct_std": 1.4142135623730951,
+        "peak_mean": 0.7986062176690213,
+        "meanscore_mean": 0.6158266777916473,
+        "burden_mean": 0.49408668385551807,
+        "regulators_mean": 3.896623376623377,
+        "realizable_frac": 1.0,
+        "per_seed_distinct": [
+          11,
+          10,
+          9,
+          11,
+          10,
+          14,
+          13,
+          10,
+          11,
+          11
+        ]
+      }
+    },
+    "gnn": {
+      "beta=1.0": {
+        "distinct_mean": 14.1,
+        "distinct_std": 3.1128764832546763,
+        "peak_mean": 0.7770631557140575,
+        "meanscore_mean": 0.5935315166949092,
+        "burden_mean": 0.49658248270979866,
+        "regulators_mean": 3.9448809523809523,
+        "realizable_frac": 1.0,
+        "per_seed_distinct": [
+          15,
+          13,
+          20,
+          9,
+          14,
+          15,
+          17,
+          12,
+          16,
+          10
+        ]
+      },
+      "beta=4.0": {
+        "distinct_mean": 9.8,
+        "distinct_std": 3.4583232931581165,
+        "peak_mean": 0.786037181655062,
+        "meanscore_mean": 0.5952401044249034,
+        "burden_mean": 0.4942302115342365,
+        "regulators_mean": 3.925,
+        "realizable_frac": 1.0,
+        "per_seed_distinct": [
+          13,
+          10,
+          3,
+          13,
+          4,
+          12,
+          12,
+          12,
+          8,
+          11
+        ]
+      }
+    }
+  },
+  "paired_gnn_minus_mlp": {
+    "beta=1.0": {
+      "mean_diff": 2.4,
+      "ci_low": 0.4,
+      "ci_high": 4.4,
+      "win_rate": 0.8,
+      "sign_p": 0.1796875,
+      "n": 10
+    },
+    "beta=4.0": {
+      "mean_diff": -1.2,
+      "ci_low": -3,
+      "ci_high": 0.5,
+      "win_rate": 0.5,
+      "sign_p": 0.7265625,
+      "n": 10
+    }
+  }
+}
