@@ -1,0 +1,82 @@
+{
+  "config": {
+    "split": "interpolation",
+    "seeds": 5,
+    "eval_budget": 300,
+    "tune_steps": 2,
+    "cond_sims": 960,
+    "spec_sims": 480,
+    "beta": 1.0,
+    "entropy_coef": 0.02,
+    "held_out": [
+      2,
+      5,
+      8,
+      11
+    ]
+  },
+  "trained": {
+    "conditioned_gnn_mean": 3.125,
+    "gnn_specialist_mean": 3.15,
+    "conditioned_mlp_mean": 5.375,
+    "paired_gnn_minus_specialist": {
+      "mean_diff": -0.025,
+      "ci_low": -0.375,
+      "ci_high": 0.325,
+      "win_rate": 0.8,
+      "sign_p": 1.0,
+      "n": 40
+    },
+    "paired_gnn_minus_mlp": {
+      "mean_diff": -2.25,
+      "ci_low": -3.225,
+      "ci_high": -1.35,
+      "win_rate": 0.425,
+      "sign_p": 2.9802322387695312e-06,
+      "n": 40
+    }
+  },
+  "held_out": {
+    "conditioned_gnn_mean": 3.15,
+    "nearest_reuse_mean": 2.9,
+    "conditioned_mlp_mean": 5.95,
+    "paired_gnn_minus_nearest": {
+      "mean_diff": 0.25,
+      "ci_low": -0.35,
+      "ci_high": 0.9,
+      "win_rate": 0.85,
+      "sign_p": 1.0,
+      "n": 20
+    },
+    "paired_gnn_minus_mlp": {
+      "mean_diff": -2.8,
+      "ci_low": -4.8,
+      "ci_high": -1.05,
+      "win_rate": 0.55,
+      "sign_p": 0.021484375,
+      "n": 20
+    }
+  },
+  "crossover_per_1k_sims": {
+    "1": {
+      "conditioned_per_1k": 2.486772486772487,
+      "specialist_per_1k": 4.038461538461538
+    },
+    "2": {
+      "conditioned_per_1k": 4.017094017094017,
+      "specialist_per_1k": 4.038461538461538
+    },
+    "4": {
+      "conditioned_per_1k": 5.802469135802469,
+      "specialist_per_1k": 4.038461538461538
+    },
+    "8": {
+      "conditioned_per_1k": 7.4603174603174605,
+      "specialist_per_1k": 4.038461538461538
+    },
+    "12": {
+      "conditioned_per_1k": 8.24561403508772,
+      "specialist_per_1k": 4.038461538461538
+    }
+  }
+}

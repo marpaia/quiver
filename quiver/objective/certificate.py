@@ -12,9 +12,11 @@ regime, read from the topology alone without integrating its kinetics:
 
 Edge signs are read from operator kinetics. A single-input Hill or receiver operator with
 ``alpha = [basal, max]`` activates (``+1``) when ``max > basal`` and represses (``-1``) otherwise. A
-two-input ``hill2`` operator contributes a per-input sign read from its four-entry response vector (indexed
-by the two inputs' on/off states as ``2*b0 + b1``): ``+1``/``-1`` when the output is monotone in that
-input, ``0`` when it is non-monotone (e.g. an XOR-like logic), and no edge when the input has no effect.
+two-input ``hill2`` operator contributes a per-input sign read from its four-entry response vector
+``[a0, a1, a2, a3]``, whose entries are the expression at (both inputs off), (port-0 input on), (port-1
+input on), and (both on) --- the ordering LOICA integrates, ``a0 + a1*r1 + a2*r2 + a3*r1*r2`` with ``r1``
+the port-0 input. Each input's sign is ``+1``/``-1`` when the output is monotone in that input, ``0`` when
+it is non-monotone (e.g. an XOR-like logic), and no edge when the input has no effect.
 """
 
 from __future__ import annotations
@@ -68,8 +70,8 @@ def _operator_input_signs(node: Node) -> list[int | None]:
         if isinstance(alpha, list) and len(alpha) >= 4:
             a = [float(x) for x in alpha[:4] if isinstance(x, (int, float))]
             if len(a) == 4:
-                in0 = _sign_from_deltas([a[2] - a[0], a[3] - a[1]])
-                in1 = _sign_from_deltas([a[1] - a[0], a[3] - a[2]])
+                in0 = _sign_from_deltas([a[1] - a[0], a[3] - a[2]])
+                in1 = _sign_from_deltas([a[2] - a[0], a[3] - a[1]])
                 return [in0, in1]
         return [None, None]
     if node.kind == "sum":

@@ -24,8 +24,11 @@ from quiver.generate import evolutionary_search_designs, random_search_designs, 
 from quiver.grn import GRN
 from quiver.learn.amortized import sample_conditioned, train_conditioned
 from quiver.learn.gflownet import PolicyNet, sample_terminals, train
+from quiver.learn.gnn import GraphPolicyNet
+from quiver.learn.gnn import sample_conditioned as sample_gnn_conditioned
 from quiver.learn.gnn import sample_terminals as sample_gnn
 from quiver.learn.gnn import train as train_gnn
+from quiver.learn.gnn import train_conditioned as train_gnn_conditioned
 from quiver.objective import buildable_objective, dose_response_match, to_loica
 
 if TYPE_CHECKING:
@@ -203,12 +206,13 @@ class Designer(ModelHubMixin):  # type: ignore[misc]
     publishes it (all inherited from ``ModelHubMixin``).
     """
 
-    def __init__(self, policy: Any, max_steps: int = 8) -> None:
+    def __init__(self, policy: Any, max_steps: int = 8, arch: str = "mlp") -> None:
         self.policy = policy
         self.max_steps = max_steps
+        self.arch = arch
 
     def __repr__(self) -> str:
-        return f"Designer(trained, max_steps={self.max_steps})"
+        return f"Designer(trained, arch={self.arch!r}, max_steps={self.max_steps})"
 
     @classmethod
     def train(
@@ -220,10 +224,16 @@ class Designer(ModelHubMixin):  # type: ignore[misc]
         beta: float = 4.0,
         max_steps: int = 8,
         seed: int = 0,
+        arch: str = "mlp",
     ) -> "Designer":
-        """Train a target-conditioned policy across ``targets`` (uses ``steps * batch`` simulations, once)."""
-        policy = train_conditioned(list(targets), steps=steps, batch=batch, beta=beta, max_steps=max_steps, seed=seed)
-        return cls(policy=policy, max_steps=max_steps)
+        """Train a target-conditioned policy across ``targets`` (uses ``steps * batch`` simulations, once).
+
+        ``arch`` selects the policy representation: ``"mlp"`` (default) is the feature-summary policy
+        (:mod:`quiver.learn.amortized`); ``"gnn"`` is the graph policy over the circuit graph
+        (:mod:`quiver.learn.gnn`), which reads each node's kinetics and signed wiring."""
+        trainer = train_gnn_conditioned if arch == "gnn" else train_conditioned
+        policy = trainer(list(targets), steps=steps, batch=batch, beta=beta, max_steps=max_steps, seed=seed)
+        return cls(policy=policy, max_steps=max_steps, arch=arch)
 
     def design(
         self,
@@ -237,22 +247,39 @@ class Designer(ModelHubMixin):  # type: ignore[misc]
         """Design a portfolio for ``target`` by sampling the trained policy; no retraining."""
         behavior = dose_response_match(target)
         rng = random.Random(seed)
-        candidates = sample_conditioned(self.policy, target, budget, max_steps=self.max_steps, seed=seed)
+        sampler = sample_gnn_conditioned if self.arch == "gnn" else sample_conditioned
+        candidates = sampler(self.policy, target, budget, max_steps=self.max_steps, seed=seed)
         raw = [tune_best(grn, behavior, rng, tune_steps) for grn in candidates]
         return _portfolio_from(raw, threshold)
 
     def _save_pretrained(self, save_directory: Path) -> None:
         """Write the policy weights and architecture into ``save_directory`` (called by save_pretrained)."""
         torch.save(self.policy.state_dict(), save_directory / "policy.pt")
-        layers = list(self.policy.net)
-        config = {
+        config: dict[str, Any] = {
             "format": "quiver-designer",
             "quiver_version": _quiver_version(),
             "max_steps": self.max_steps,
-            "in_features": layers[0].in_features,
-            "hidden": layers[0].out_features,
-            "n_actions": layers[-1].out_features,
+            "arch": self.arch,
         }
+        if self.arch == "gnn":
+            config.update(
+                {
+                    "in_features": self.policy.embed.in_features,
+                    "hidden": self.policy.embed.out_features,
+                    "layers": len(self.policy.layers),
+                    "n_reg": self.policy.n_reg,
+                    "cond_dim": self.policy.cond_dim,
+                }
+            )
+        else:
+            layers = list(self.policy.net)
+            config.update(
+                {
+                    "in_features": layers[0].in_features,
+                    "hidden": layers[0].out_features,
+                    "n_actions": layers[-1].out_features,
+                }
+            )
         (save_directory / "config.json").write_text(json.dumps(config, indent=2))
 
     @classmethod
@@ -270,10 +297,23 @@ class Designer(ModelHubMixin):  # type: ignore[misc]
         """Rebuild a designer from a resolved local directory (called by from_pretrained after download)."""
         directory = Path(model_id)
         config = json.loads((directory / "config.json").read_text())
-        policy = PolicyNet(in_features=config["in_features"], hidden=config["hidden"], n_actions=config["n_actions"])
+        arch = config.get("arch", "mlp")
+        policy: Any
+        if arch == "gnn":
+            policy = GraphPolicyNet(
+                in_features=config["in_features"],
+                hidden=config["hidden"],
+                layers=config["layers"],
+                n_reg=config["n_reg"],
+                cond_dim=config.get("cond_dim", 0),
+            )
+        else:
+            policy = PolicyNet(
+                in_features=config["in_features"], hidden=config["hidden"], n_actions=config["n_actions"]
+            )
         policy.load_state_dict(torch.load(directory / "policy.pt", map_location="cpu"))
         policy.eval()
-        return cls(policy, max_steps=config["max_steps"])
+        return cls(policy, max_steps=config["max_steps"], arch=arch)
 
 
 def _quiver_version() -> str:

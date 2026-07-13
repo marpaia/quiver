@@ -48,12 +48,25 @@ def rollout(
 
 
 def vargrad_step(
-    optimizer: torch.optim.Optimizer, log_probs: list[torch.Tensor], log_rewards: list[torch.Tensor]
+    optimizer: torch.optim.Optimizer,
+    log_probs: list[torch.Tensor],
+    log_rewards: list[torch.Tensor],
+    *,
+    entropies: list[torch.Tensor] | None = None,
+    entropy_coef: float = 0.0,
 ) -> None:
     """One VarGrad update: minimize the batch variance of ``beta * log R - log P_forward``. Vanishes when
-    the residual is constant across the batch, which is where the terminal marginal is reward-proportional."""
+    the residual is constant across the batch, which is where the terminal marginal is reward-proportional.
+
+    ``entropy_coef`` optionally adds a trajectory-entropy bonus (``entropies`` are the summed per-step
+    policy entropies of the batch's trajectories): subtracting ``entropy_coef * mean(entropies)`` from the
+    loss rewards higher-entropy sampling, a light regularizer against the policy collapsing onto a few
+    topologies at high ``beta``. The default ``entropy_coef = 0`` leaves the plain VarGrad update
+    bit-for-bit unchanged."""
     delta = torch.stack(log_rewards) - torch.stack(log_probs)
     loss = ((delta - delta.mean()) ** 2).mean()
+    if entropies is not None and entropy_coef:
+        loss = loss - entropy_coef * torch.stack(entropies).mean()
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()

@@ -1,0 +1,76 @@
+{
+  "config": {
+    "split": "interpolation",
+    "seeds": 3,
+    "beta": 4,
+    "eval_budget": 300,
+    "sens_samples": 50,
+    "cond_sims": 960
+  },
+  "target_sensitivity": {
+    "mlp": {
+      "mean": 0.0008444633116080007,
+      "std": 0.0005359166196829758
+    },
+    "node-gnn": {
+      "mean": 0.8142649873670199,
+      "std": 0.1447840923796169
+    },
+    "head-gnn": {
+      "mean": 0.6314347695695923,
+      "std": 0.07721844105175359
+    }
+  },
+  "amortization": {
+    "mlp": {
+      "trained_mean": 6.125,
+      "held_out_mean": 7.416666666666667
+    },
+    "node-gnn": {
+      "trained_mean": 2.125,
+      "held_out_mean": 1.6666666666666667
+    },
+    "head-gnn": {
+      "trained_mean": 3.25,
+      "held_out_mean": 2.5
+    }
+  },
+  "paired_vs_mlp": {
+    "node-gnn": {
+      "trained": {
+        "mean_diff": -4,
+        "ci_low": -6.166666666666667,
+        "ci_high": -2.2083333333333335,
+        "win_rate": 0.375,
+        "sign_p": 0.000518798828125,
+        "n": 24
+      },
+      "held_out": {
+        "mean_diff": -5.75,
+        "ci_low": -9.416666666666666,
+        "ci_high": -2.5,
+        "win_rate": 0.4166666666666667,
+        "sign_p": 0.015625,
+        "n": 12
+      }
+    },
+    "head-gnn": {
+      "trained": {
+        "mean_diff": -2.875,
+        "ci_low": -4.291666666666667,
+        "ci_high": -1.625,
+        "win_rate": 0.4166666666666667,
+        "sign_p": 0.0009765625,
+        "n": 24
+      },
+      "held_out": {
+        "mean_diff": -4.916666666666667,
+        "ci_low": -7.916666666666667,
+        "ci_high": -2.1666666666666665,
+        "win_rate": 0.4166666666666667,
+        "sign_p": 0.015625,
+        "n": 12
+      }
+    }
+  }
+}

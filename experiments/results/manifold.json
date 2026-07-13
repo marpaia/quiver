@@ -1,0 +1,35 @@
+{
+  "corpus_size": 63,
+  "families": [
+    "CRISPRi",
+    "TetR"
+  ],
+  "leave_one_out": {
+    "n": 63,
+    "kde_mean_ll": -2.5336720659042764,
+    "box_mean_ll": -4.731220165092052,
+    "kde_minus_box_mean": 2.197548099187775,
+    "ci_low": 0.8533965555698578,
+    "ci_high": 3.88361565494323,
+    "kde_wins_frac": 0.873015873015873
+  },
+  "leave_one_family_out": {
+    "CRISPRi": {
+      "held_n": 7,
+      "train_n": 56,
+      "kde_mean_ll": -5.6166335060342645,
+      "box_mean_ll": -27.631021115928547,
+      "kde_minus_box_mean": 22.014387609894282
+    },
+    "TetR": {
+      "held_n": 56,
+      "train_n": 7,
+      "kde_mean_ll": -1095.4041148951649,
+      "box_mean_ll": -27.631021115928547,
+      "kde_minus_box_mean": -1067.7730937792364
+    }
+  },
+  "loo_beats_box_ci_excludes_zero": true,
+  "lofo_beats_box_all_families": false,
+  "verdict": "density is real (wins within-corpus) but family-specific (loses cross-family): grow the corpus"
+}
