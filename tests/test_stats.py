@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from quiver.eval import bootstrap_ci, paired_summary, random_effects, sign_test_p
+from quiver.research.eval import bootstrap_ci, paired_summary, random_effects, sign_test_p
 
 
 def test_paired_summary_flags_a_consistent_advantage() -> None:

@@ -29,23 +29,26 @@ from typing import Callable
 
 import _common
 
-from quiver.eval import FailureVector, failed_conditions, failure_correlation, portfolio_survival, random_effects
-from quiver.generate import evolutionary_search_designs, mutate, random_search_designs
+from quiver.generate import mutate
 from quiver.grn import GRN
-from quiver.objective import (
-    Behavior,
-    TargetResponse,
+from quiver.objective import Behavior, TargetResponse, dose_response_match, score_once, sensor_target_manifold
+from quiver.research.baselines import evolutionary_search_designs, random_search_designs
+from quiver.research.eval import (
+    FailureVector,
+    failed_conditions,
+    failure_correlation,
+    portfolio_survival,
+    random_effects,
+)
+from quiver.research.objective import (
     context_battery,
-    dose_response_match,
     noise_battery,
     resource_battery,
-    score_once,
     score_under_context,
     score_under_noise,
     score_under_resource,
-    sensor_target_manifold,
 )
-from quiver.parallel import pmap
+from quiver.research.parallel import pmap
 
 # Model B is selected by the MODEL env var: "resource" (shared-budget burden) or "noise" (intrinsic
 # molecular noise, orthogonal to the deterministic models). Model A is always the parameter/context battery.

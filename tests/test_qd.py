@@ -8,8 +8,8 @@ import pytest
 
 pytest.importorskip("loica")
 
-from quiver.generate import gp_ucb_search, map_elites, novelty_search
 from quiver.objective import TargetResponse, dose_response_match
+from quiver.research.baselines import gp_ucb_search, map_elites, novelty_search
 
 Search = Callable[..., list[tuple[str, float]]]
 TARGET = TargetResponse("GFP", ec50=1.0, dynamic_range=100.0, direction="any")

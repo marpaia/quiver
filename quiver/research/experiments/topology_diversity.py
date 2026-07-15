@@ -15,10 +15,10 @@ import random
 import time
 from statistics import mean, pstdev
 
-from quiver.eval import select_portfolio
 from quiver.generate import diverse_topologies, mutate
 from quiver.grn import GRN
 from quiver.objective import Behavior, TargetResponse, dose_response_match, score_once
+from quiver.research.eval import select_portfolio
 
 TARGET = TargetResponse(signal="GFP", ec50=1.0, dynamic_range=100.0, direction="any")
 POPULATION = 80

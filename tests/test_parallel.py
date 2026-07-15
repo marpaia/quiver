@@ -6,8 +6,9 @@ import random
 
 import pytest
 
-from quiver.objective import Context, dose_response_match, score_once, score_under_context, sensor_target_manifold
-from quiver.parallel import SensorCell, default_workers, pmap, score_cells
+from quiver.objective import dose_response_match, score_once, sensor_target_manifold
+from quiver.research.objective import Context, score_under_context
+from quiver.research.parallel import SensorCell, default_workers, pmap, score_cells
 
 
 def _square(x: int) -> int:

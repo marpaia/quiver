@@ -28,12 +28,12 @@ from statistics import mean, pstdev
 from _common import SENSOR_TARGET_GRID as TARGETS
 from _common import distinct
 
-from quiver.eval import PairedSummary, paired_summary
 from quiver.generate import tune_score
 from quiver.grn import GRN
 from quiver.learn.amortized import sample_conditioned, target_features, train_conditioned
 from quiver.learn.gflownet import PolicyNet, sample_terminals, train
 from quiver.objective import TargetResponse, dose_response_match
+from quiver.research.eval import PairedSummary, paired_summary
 
 SEEDS = 3
 EVAL_BUDGET = 300

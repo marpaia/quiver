@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from quiver.generate.manifold import KineticsKDE, UniformBox, circuit_log_likelihood, load_corpus
 from quiver.generate.search import example_inducible
+from quiver.research.manifold import KineticsKDE, UniformBox, circuit_log_likelihood, load_corpus
 
 
 def test_corpus_loads() -> None:

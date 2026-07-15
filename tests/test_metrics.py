@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from math import comb
 
-from quiver.eval import discovery_curve, evaluate_portfolio, evaluate_quality, pass_at_k, sampling_fidelity
+from quiver.research.eval import discovery_curve, evaluate_portfolio, evaluate_quality, pass_at_k, sampling_fidelity
 
 
 def test_sampling_fidelity_entropy_top_and_tv() -> None:

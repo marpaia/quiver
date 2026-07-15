@@ -5,8 +5,8 @@ discovery curve are each meaningful (proportionality needs N >> #modes; discover
 
 from __future__ import annotations
 
-from quiver.eval import discovery_curve, evaluate_portfolio, evaluate_quality
-from quiver.eval.synthetic import concentrated_samples, proportional_samples
+from quiver.research.eval import discovery_curve, evaluate_portfolio, evaluate_quality
+from quiver.research.eval.synthetic import concentrated_samples, proportional_samples
 
 
 def test_metric_recovers_proportionality_contrast() -> None:

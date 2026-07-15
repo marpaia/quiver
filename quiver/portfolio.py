@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any, Iterator
 import torch
 from huggingface_hub import ModelHubMixin
 
-from quiver.generate import evolutionary_search_designs, random_search_designs, tune_best
+from quiver.generate import tune_best
 from quiver.grn import GRN
 from quiver.learn.amortized import sample_conditioned, train_conditioned
 from quiver.learn.gflownet import PolicyNet, sample_terminals, train
@@ -34,6 +34,7 @@ from quiver.objective import buildable_objective, dose_response_match, to_loica
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from quiver.component import ComponentLibrary
     from quiver.objective import Behavior, ObjectiveFn, TargetResponse
 
 Design = tuple[GRN, float]
@@ -86,27 +87,28 @@ def design(
     behavior: "Behavior",
     *,
     budget: int = 300,
-    method: str = "gflownet",
+    policy: str = "gnn",
     threshold: float = 0.5,
     tune_steps: int = 2,
     seed: int = 0,
-    max_regulators: int = 4,
     beta: float = 4.0,
     robust: bool = True,
     ensemble: int = 8,
     jitter: float = 0.3,
     burden_capacity: float | None = 500.0,
     objective: "ObjectiveFn | None" = None,
+    library: "ComponentLibrary | None" = None,
+    inducer: str = "aTc",
 ) -> Portfolio:
     """Design a portfolio of distinct, high-scoring circuits for ``behavior``.
 
-    ``method`` selects the generator: ``"gflownet"`` (default, the diversity-seeking learned sampler with an
-    MLP-over-features policy) trains a policy for this behavior and samples a broad portfolio from it;
-    ``"gnn"`` is the same sampler with a graph-neural-network policy over the circuit graph
-    (:mod:`quiver.learn.gnn`); ``"evolutionary"`` and ``"random"`` are non-learned baselines. ``budget`` is
-    the generation budget; ``threshold`` is the minimum score a circuit
-    must clear to enter the portfolio; ``beta`` tunes the GFlowNet reward exponent (higher sharpens toward the
-    best circuits, lower spreads mass more evenly).
+    The strategy is fixed: a diversity-seeking GFlowNet trains a policy for this behavior and samples a broad,
+    de-duplicated portfolio of distinct topologies from it. ``policy`` selects the *representation*, a
+    methodological choice, not a different strategy: ``"gnn"`` (default) is the graph-neural-network policy
+    over the circuit graph (:mod:`quiver.learn.gnn`), which discovers the broader single-target portfolio;
+    ``"mlp"`` is the feature-summary policy (:mod:`quiver.learn.gflownet`). ``budget`` is the generation
+    budget; ``threshold`` is the minimum score a circuit must clear to enter the portfolio; ``beta`` tunes the
+    GFlowNet reward exponent (higher sharpens toward the best circuits, lower spreads mass more evenly).
 
     By default the search optimizes a *buildability-aware* objective (:func:`quiver.objective.buildable_objective`):
     the target behavior's robustness over an ``ensemble`` of perturbed parameterizations, discounted by the
@@ -122,13 +124,14 @@ def design(
         )
     raw = _generate(
         behavior,
-        method=method,
+        policy=policy,
         budget=budget,
         tune_steps=tune_steps,
         seed=seed,
-        max_regulators=max_regulators,
         beta=beta,
         objective=objective,
+        library=library,
+        inducer=inducer,
     )
     return _portfolio_from(raw, threshold)
 
@@ -149,48 +152,34 @@ def _portfolio_from(raw: list[Design], threshold: float) -> Portfolio:
 def _generate(
     behavior: "Behavior",
     *,
-    method: str,
+    policy: str,
     budget: int,
     tune_steps: int,
     seed: int,
-    max_regulators: int,
     beta: float,
     objective: "ObjectiveFn | None" = None,
+    library: "ComponentLibrary | None" = None,
+    inducer: str = "aTc",
 ) -> list[Design]:
-    name = method.lower()
-    if name in ("evolutionary", "evo"):
-        return evolutionary_search_designs(
-            behavior,
-            budget=budget,
-            tune_steps=tune_steps,
-            seed=seed,
-            max_regulators=max_regulators,
-            objective=objective,
-        )
-    if name == "random":
-        return random_search_designs(
-            behavior,
-            budget=budget,
-            tune_steps=tune_steps,
-            seed=seed,
-            max_regulators=max_regulators,
-            objective=objective,
-        )
-    if name in ("gflownet", "gfn"):
-        policy = train(behavior, beta=beta, seed=seed, objective=objective)
+    name = policy.lower()
+    if name in ("gnn", "graph"):
+        gnn_policy = train_gnn(behavior, beta=beta, seed=seed, objective=objective, library=library, inducer=inducer)
+        rng = random.Random(seed)
+        candidates = sample_gnn(gnn_policy, budget, seed=seed, library=library, inducer=inducer)
+        # A Component-grounded design's kinetics are the real part values; keep them exact (no parameter
+        # tuning), scoring the grounded circuit directly. Abstract designs still tune their parameters.
+        steps = 0 if library is not None else tune_steps
+        return [tune_best(grn, behavior, rng, steps, objective=objective) for grn in candidates]
+    if name in ("mlp", "gflownet", "gfn"):
+        if library is not None:
+            raise ValueError("Component grounding is currently supported only with policy='gnn'")
+        mlp_policy = train(behavior, beta=beta, seed=seed, objective=objective)
         rng = random.Random(seed)
         return [
             tune_best(grn, behavior, rng, tune_steps, objective=objective)
-            for grn in sample_terminals(policy, budget, seed=seed)
+            for grn in sample_terminals(mlp_policy, budget, seed=seed)
         ]
-    if name == "gnn":
-        gnn_policy = train_gnn(behavior, beta=beta, seed=seed, objective=objective)
-        rng = random.Random(seed)
-        return [
-            tune_best(grn, behavior, rng, tune_steps, objective=objective)
-            for grn in sample_gnn(gnn_policy, budget, seed=seed)
-        ]
-    raise ValueError(f"unknown method {method!r}; choose 'evolutionary', 'random', 'gflownet', or 'gnn'")
+    raise ValueError(f"unknown policy {policy!r}; choose 'gnn' or 'mlp'")
 
 
 class Designer(ModelHubMixin):  # type: ignore[misc]
@@ -231,7 +220,7 @@ class Designer(ModelHubMixin):  # type: ignore[misc]
         ``arch`` selects the policy representation: ``"mlp"`` (default) is the feature-summary policy
         (:mod:`quiver.learn.amortized`); ``"gnn"`` is the graph policy over the circuit graph
         (:mod:`quiver.learn.gnn`), which reads each node's kinetics and signed wiring."""
-        trainer = train_gnn_conditioned if arch == "gnn" else train_conditioned
+        trainer: Any = train_gnn_conditioned if arch == "gnn" else train_conditioned
         policy = trainer(list(targets), steps=steps, batch=batch, beta=beta, max_steps=max_steps, seed=seed)
         return cls(policy=policy, max_steps=max_steps, arch=arch)
 
@@ -247,7 +236,7 @@ class Designer(ModelHubMixin):  # type: ignore[misc]
         """Design a portfolio for ``target`` by sampling the trained policy; no retraining."""
         behavior = dose_response_match(target)
         rng = random.Random(seed)
-        sampler = sample_gnn_conditioned if self.arch == "gnn" else sample_conditioned
+        sampler: Any = sample_gnn_conditioned if self.arch == "gnn" else sample_conditioned
         candidates = sampler(self.policy, target, budget, max_steps=self.max_steps, seed=seed)
         raw = [tune_best(grn, behavior, rng, tune_steps) for grn in candidates]
         return _portfolio_from(raw, threshold)

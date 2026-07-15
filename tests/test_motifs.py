@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import random
 
-from quiver.generate import mutual_repression_toggle, repressilator
 from quiver.grn import is_operator
+from quiver.research.baselines import mutual_repression_toggle, repressilator
 
 _EXPECTED_INPUTS = {"source": 0, "receiver": 1, "hill1": 1, "hill2": 2}
 

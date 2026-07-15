@@ -5,9 +5,9 @@ from __future__ import annotations
 import pytest
 
 from quiver.generate import example_inducible
-from quiver.objective import Context, apply_context, context_battery
 from quiver.objective.behavior import inducible_response
-from quiver.objective.stress import score_under_context
+from quiver.research.objective import Context, apply_context, context_battery
+from quiver.research.objective.stress import score_under_context
 
 
 def test_apply_context_scales_expression_and_affinity_leaving_others() -> None:

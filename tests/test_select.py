@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from quiver.eval import select_portfolio
+from quiver.research.eval import select_portfolio
 
 
 def test_select_keeps_best_per_topology_ranked_by_score() -> None:

@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import os
 
-from quiver.eval import evaluate_portfolio
 from quiver.objective import TargetResponse
+from quiver.research.eval import evaluate_portfolio
 
 Stream = list[tuple[str, float]]
 

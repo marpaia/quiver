@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from quiver.generate import example_inducible
-from quiver.objective import noise_battery
+from quiver.research.objective import noise_battery
 
 
 def test_noise_battery_is_distinct_replicate_seeds() -> None:
@@ -18,7 +18,7 @@ def test_noise_battery_is_distinct_replicate_seeds() -> None:
 def test_score_under_noise_is_reproducible_and_in_unit_interval() -> None:
     pytest.importorskip("loica")
     from quiver.objective.behavior import inducible_response
-    from quiver.objective.noise import score_under_noise
+    from quiver.research.objective.noise import score_under_noise
 
     grn = example_inducible()
     behavior = inducible_response("gfp")
