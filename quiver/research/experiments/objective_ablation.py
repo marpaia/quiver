@@ -43,7 +43,6 @@ from statistics import mean, pstdev  # noqa: E402
 from _common import BETA, EVAL_BUDGET, MAX_STEPS, PASS, TRAIN_BATCH, TRAIN_STEPS, TUNE_STEPS, env_int  # noqa: E402
 from _policy import deliver, delivered_portfolio, regulator_count, summarize  # noqa: E402
 
-from quiver.eval import paired_summary  # noqa: E402
 from quiver.learn import gflownet, structured  # noqa: E402
 from quiver.objective import (  # noqa: E402
     Behavior,
@@ -52,6 +51,7 @@ from quiver.objective import (  # noqa: E402
     buildable_objective,
     dose_response_match,
 )
+from quiver.research.eval import paired_summary  # noqa: E402
 
 TARGET = TargetResponse("GFP", ec50=1.0, dynamic_range=100.0, direction="any")
 

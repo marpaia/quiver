@@ -38,11 +38,11 @@ from typing import Any, Callable  # noqa: E402
 from _common import SENSOR_TARGET_GRID as TARGETS  # noqa: E402
 from _common import distinct, env_int  # noqa: E402
 
-from quiver.eval import paired_summary  # noqa: E402
 from quiver.generate import tune_score  # noqa: E402
 from quiver.grn import GRN  # noqa: E402
 from quiver.learn import amortized, gnn  # noqa: E402
 from quiver.objective import TargetResponse, dose_response_match  # noqa: E402
+from quiver.research.eval import paired_summary  # noqa: E402
 
 SEEDS = env_int("SEEDS", 3)
 EVAL_BUDGET = env_int("EVAL_BUDGET", 300)

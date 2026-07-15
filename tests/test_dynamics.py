@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from quiver.objective import envelope_decay, is_sustained, sustained_oscillation, ultrasensitive_switch
-from quiver.objective.dynamics import _history_gap
 from quiver.objective.simulate import SimulationResult
+from quiver.research.objective import envelope_decay, is_sustained, sustained_oscillation, ultrasensitive_switch
+from quiver.research.objective.dynamics import _history_gap
 
 
 def _trace(trace: list[float]) -> SimulationResult:

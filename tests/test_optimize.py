@@ -4,8 +4,8 @@ import pytest
 
 pytest.importorskip("loica")
 
-from quiver.generate import evolutionary_search, random_search  # noqa: E402
 from quiver.objective import TargetResponse, dose_response_match  # noqa: E402
+from quiver.research.baselines import evolutionary_search, random_search  # noqa: E402
 
 
 @pytest.mark.sim

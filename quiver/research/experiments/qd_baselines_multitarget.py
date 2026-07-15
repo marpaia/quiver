@@ -32,9 +32,9 @@ from _common import (
 )
 from _gfn import gflownet_stream
 
-from quiver.eval import paired_summary
-from quiver.generate import evolutionary_search, gp_ucb_search, map_elites, novelty_search, random_search
 from quiver.objective import Behavior, TargetResponse, dose_response_match
+from quiver.research.baselines import evolutionary_search, gp_ucb_search, map_elites, novelty_search, random_search
+from quiver.research.eval import paired_summary
 
 SEEDS = env_int("SEEDS", 10)
 

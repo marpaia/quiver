@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 from statistics import fmean
 
-from quiver.eval.stats import random_effects
+from quiver.research.eval.stats import random_effects
 
 RESULTS_DIR = Path(__file__).parent / "results"
 OUT = RESULTS_DIR / "decorrelation_summary.json"

@@ -23,15 +23,16 @@ def test_portfolio_exposes_ranked_designs() -> None:
     assert [score for _, score in portfolio] == [0.9, 0.5]
 
 
-def test_design_rejects_unknown_method() -> None:
-    with pytest.raises(ValueError, match="unknown method"):
-        design(_behavior(), method="bogus")
+def test_design_rejects_unknown_policy() -> None:
+    with pytest.raises(ValueError, match="unknown policy"):
+        design(_behavior(), policy="bogus")
 
 
 @pytest.mark.sim
 def test_design_returns_distinct_ranked_portfolio() -> None:
+    pytest.importorskip("torch")
     pytest.importorskip("loica")
-    portfolio = design(_behavior(), method="evolutionary", budget=40, tune_steps=1, threshold=0.0, seed=0)
+    portfolio = design(_behavior(), policy="mlp", budget=40, tune_steps=1, threshold=0.0, seed=0)
     hashes = [grn.topology_hash() for grn, _ in portfolio]
     assert hashes, "expected at least one design"
     assert len(hashes) == len(set(hashes)), "portfolio must hold distinct topologies"
@@ -40,9 +41,10 @@ def test_design_returns_distinct_ranked_portfolio() -> None:
 
 @pytest.mark.sim
 def test_portfolio_networks_compile_to_loica() -> None:
+    pytest.importorskip("torch")
     import loica as lc
 
-    portfolio = design(_behavior(), method="evolutionary", budget=40, tune_steps=1, threshold=0.0, seed=0)
+    portfolio = design(_behavior(), policy="mlp", budget=40, tune_steps=1, threshold=0.0, seed=0)
     networks = portfolio.networks()
     assert len(networks) == len(portfolio)
     assert all(isinstance(network, lc.GeneticNetwork) for network in networks)

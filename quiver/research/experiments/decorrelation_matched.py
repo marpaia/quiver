@@ -27,9 +27,9 @@ from statistics import fmean, mean, pvariance
 import _common
 import decorrelation_scaled as ds
 
-from quiver.eval import bootstrap_ci, marginal_pass_rate, portfolio_survival, random_effects
 from quiver.objective import TargetResponse, dose_response_match, sensor_target_manifold
-from quiver.parallel import pmap
+from quiver.research.eval import bootstrap_ci, marginal_pass_rate, portfolio_survival, random_effects
+from quiver.research.parallel import pmap
 
 PR_TOL = _common.env_float("PR_TOL", 0.05)
 RESULTS_DIR = ds.RESULTS_DIR

@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 import pytest
 
-from quiver.objective import ReferenceCurve, curve_match, reference_from_measurements, result_to_reference
 from quiver.objective.simulate import SimulationResult
+from quiver.research.objective import ReferenceCurve, curve_match, reference_from_measurements, result_to_reference
 
 
 def _result(endpoints: list[float]) -> SimulationResult:

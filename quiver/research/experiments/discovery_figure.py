@@ -21,9 +21,9 @@ import matplotlib.pyplot as plt
 from _common import EVAL_BUDGET, PASS, TUNE_STEPS
 from _gfn import gflownet_stream
 
-from quiver.eval.metrics import discovery_curve
-from quiver.generate import evolutionary_search, random_search
 from quiver.objective import Behavior, TargetResponse, dose_response_match
+from quiver.research.baselines import evolutionary_search, random_search
+from quiver.research.eval.metrics import discovery_curve
 
 TARGET = TargetResponse("GFP", ec50=1.0, dynamic_range=100.0, direction="any")
 SEEDS = 10

@@ -8,7 +8,8 @@ import random
 import pytest
 
 from quiver.generate import example_inducible, random_sensor
-from quiver.objective import apply_resource_competition, burden_fraction, circuit_demand, resource_battery
+from quiver.objective import burden_fraction, circuit_demand
+from quiver.research.objective import apply_resource_competition, resource_battery
 
 
 def test_circuit_demand_is_positive() -> None:
@@ -55,8 +56,9 @@ def test_resource_battery_is_a_heterogeneous_grid() -> None:
 @pytest.mark.sim
 def test_resource_burden_does_not_improve_the_score() -> None:
     pytest.importorskip("loica")
-    from quiver.objective import Context, score_once, score_under_resource
+    from quiver.objective import score_once
     from quiver.objective.behavior import inducible_response
+    from quiver.research.objective import Context, score_under_resource
 
     grn = example_inducible()
     behavior = inducible_response("gfp")

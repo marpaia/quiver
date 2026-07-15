@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from quiver.eval.decorrelation import failed_conditions, failure_correlation, marginal_pass_rate, portfolio_survival
+from quiver.research.eval.decorrelation import (
+    failed_conditions,
+    failure_correlation,
+    marginal_pass_rate,
+    portfolio_survival,
+)
 
 
 def test_failed_conditions_thresholds_below() -> None:

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import random
 
-from quiver.generate.motifs import mutual_repression_toggle, repressilator
 from quiver.generate.topology import sensor_cascade
 from quiver.grn import GRN, Edge, Node
-from quiver.objective.certificate import certifies, is_monotone, loop_signs, signed_interaction_graph
+from quiver.research.baselines.motifs import mutual_repression_toggle, repressilator
+from quiver.research.objective.certificate import certifies, is_monotone, loop_signs, signed_interaction_graph
 
 
 def _incoherent_feedforward() -> GRN:

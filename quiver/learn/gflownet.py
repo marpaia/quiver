@@ -18,7 +18,7 @@ from typing import Callable
 
 import torch
 
-from quiver.generate import tune_score
+from quiver.generate.optimize import tune_score
 from quiver.gfn.env import ACTIONS, apply_action, available_actions
 from quiver.grn import GRN, is_operator
 from quiver.learn._core import rollout, vargrad_step

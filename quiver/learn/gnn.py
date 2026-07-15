@@ -22,12 +22,7 @@ import random
 import torch
 
 from quiver.gfn.env import initial_sensor
-from quiver.gfn.structured_env import (
-    MAX_REG,
-    STRUCTURED_ACTIONS,
-    apply_structured_action,
-    available_structured_actions,
-)
+from quiver.gfn.structured_env import MAX_REG, STRUCTURED_ACTIONS, apply_structured_action, available_structured_actions
 from quiver.grn import GRN, Node, ParamValue, is_operator
 from quiver.learn._core import vargrad_step
 from quiver.learn.amortized import target_features

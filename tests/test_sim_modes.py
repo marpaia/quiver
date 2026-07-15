@@ -20,8 +20,8 @@ def test_sustained_growth_keeps_autonomous_dynamics_bounded() -> None:
     # must keep an autonomous circuit's trajectory finite and bounded.
     import random
 
-    from quiver.generate import repressilator
     from quiver.objective import simulate
+    from quiver.research.baselines import repressilator
 
     result = simulate(repressilator(random.Random(0)), long_run())
     values = [v for matrix in result.signals.values() for trace in matrix for v in trace]
@@ -33,8 +33,9 @@ def test_sustained_growth_keeps_autonomous_dynamics_bounded() -> None:
 def test_repressilator_sustains_oscillation_under_long_run() -> None:
     import random
 
-    from quiver.generate import repressilator
-    from quiver.objective import simulate, sustained_oscillation
+    from quiver.objective import simulate
+    from quiver.research.baselines import repressilator
+    from quiver.research.objective import sustained_oscillation
 
     detect = sustained_oscillation("GFP")
     config = long_run(sustained_growth=1.0)

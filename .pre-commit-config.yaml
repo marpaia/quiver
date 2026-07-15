@@ -16,5 +16,5 @@ repos:
     hooks:
       - id: mypy
         additional_dependencies: ["numpy>=1.26"]
-        args: ["quiver", "experiments"]
+        args: ["quiver"]
         pass_filenames: false

@@ -30,7 +30,8 @@ from typing import Callable, Iterable, TypeVar, cast
 
 from quiver.generate.optimize import tune_score
 from quiver.grn import GRN
-from quiver.objective import Context, TargetResponse, apply_context, dose_response_match, score_once
+from quiver.objective import TargetResponse, dose_response_match, score_once
+from quiver.research.objective import Context, apply_context
 
 T = TypeVar("T")
 R = TypeVar("R")

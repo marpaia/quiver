@@ -25,8 +25,8 @@ from collections import defaultdict
 from pathlib import Path
 from statistics import mean
 
-from quiver.eval import bootstrap_ci
-from quiver.generate.manifold import DensityModel, KineticsKDE, KineticsSample, UniformBox, load_corpus
+from quiver.research.eval import bootstrap_ci
+from quiver.research.manifold import DensityModel, KineticsKDE, KineticsSample, UniformBox, load_corpus
 
 RESULTS = Path(__file__).parent / "results" / "manifold.json"
 
