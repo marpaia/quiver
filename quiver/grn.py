@@ -116,7 +116,13 @@ def _clone(value: ParamValue) -> ParamValue:
 
 @dataclass(frozen=True)
 class Node:
-    """One node: a species or operator, its display name, and its kinetic parameters."""
+    """One node: a species or operator, its display name, and its kinetic parameters.
+
+    ``component_id`` records the SBOL Component a node is grounded in (its kinetics taken from a characterized
+    part); ``None`` for an abstract node. It is provenance only, carried through serialization but excluded
+    from the structural and topology hashes and never passed to the simulator --- the node's identity for
+    diversity and its behavior are set by its kinetics and wiring, which the component determines.
+    """
 
     id: str
     kind: NodeKind
@@ -124,6 +130,8 @@ class Node:
     params: dict[str, ParamValue] = field(default_factory=dict)
     # Number of input ports for a variable-input operator (``sum``); ignored for fixed-arity kinds.
     n_inputs: int = 1
+    # The id of the SBOL Component this node is grounded in, or ``None`` for an abstract node.
+    component_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -200,7 +208,14 @@ class GRN:
         return {
             "version": 1,
             "nodes": [
-                {"id": n.id, "kind": n.kind, "name": n.name, "params": n.params, "inputCount": n.n_inputs}
+                {
+                    "id": n.id,
+                    "kind": n.kind,
+                    "name": n.name,
+                    "params": n.params,
+                    "inputCount": n.n_inputs,
+                    **({"componentId": n.component_id} if n.component_id is not None else {}),
+                }
                 for n in self.nodes
             ],
             "edges": [{"source": e.source, "target": e.target, "port": e.port} for e in self.edges],
@@ -219,6 +234,7 @@ class GRN:
                 name=str(n["name"]),
                 params=dict(n.get("params", {})),
                 n_inputs=int(n.get("inputCount", 1)),
+                component_id=(str(n["componentId"]) if n.get("componentId") is not None else None),
             )
             for n in raw_nodes
         )
