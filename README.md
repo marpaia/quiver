@@ -50,10 +50,11 @@ network.draw()
 result = simulate(portfolio.best[0])
 ```
 
-`portfolio.circuits` and `portfolio.scores` give the ranked circuits and their scores, iterating a
-`Portfolio` yields `(circuit, score)` pairs, and `method="evolutionary"` swaps in a non-learned baseline for
-a quick comparison. The GFlowNet is the point: instead of hill-climbing to one optimum, it learns to _sample_
-circuits in proportion to their score, so a single run surfaces a diverse portfolio rather than one design.
+`portfolio.circuits` and `portfolio.scores` give the ranked circuits and their scores, and iterating a
+`Portfolio` yields `(circuit, score)` pairs. The GFlowNet is the point: instead of hill-climbing to one
+optimum, it learns to _sample_ circuits in proportion to their score, so a single run surfaces a diverse
+portfolio rather than one design. There is one design strategy; `policy="mlp"` swaps the graph policy for the
+feature-summary policy (a methodological choice, not a different approach).
 
 ## The buildability-aware objective
 
@@ -73,19 +74,41 @@ promoter reaches.
 
 ## A policy that reads circuit physics
 
-The generator builds a circuit one move at a time and learns which move to make. The default policy
-(`method="gflownet"`) reads a small fixed summary of the partial circuit. The graph policy
-(`method="gnn"`) instead reads the circuit as a graph: directed message passing over the bipartite wiring
-builds node embeddings from physical features (kind, activation or repression sign, Hill `K` and `n`,
-dynamic range, degradation), and a per-regulator head chooses which regulator to relay from or rewire to.
+The generator builds a circuit one move at a time and learns which move to make. The default graph policy
+(`policy="gnn"`) reads the circuit as a graph: directed message passing over the bipartite wiring builds node
+embeddings from physical features (kind, activation or repression sign, Hill `K` and `n`, dynamic range,
+degradation), and a per-regulator head chooses which regulator to relay from or rewire to. The feature-summary
+policy (`policy="mlp"`) instead reads a small fixed summary of the partial circuit.
 
 ```python
-portfolio = quiver.design(behavior, method="gnn")
+portfolio = quiver.design(behavior)              # the graph policy is the default
+portfolio = quiver.design(behavior, policy="mlp")  # or the feature-summary policy
 ```
 
 Reading the circuit as a graph is a relational inductive bias: the policy conditions on the kinetics and
 signed wiring that set behavior, and the representation carries across circuit sizes instead of compressing
 every circuit to a fixed vector.
+
+## Design from real SBOL Components
+
+Pass a `library` and the graph policy chooses a concrete characterized **SBOL Component** for every stage as it
+builds the circuit, rather than emitting abstract Hill kinetics: the input sensor from the target inducer, and
+each promoter stage from a repressor gate, masked so no transcription factor is reused (orthogonality). The
+delivered circuit is a real bill-of-Components whose kinetics are the measured part values, so it carries part
+identity through to LOICA and SBOL.
+
+```python
+from quiver import load_cello
+
+library = load_cello()  # 63 repressor gates + 21 input sensors, characterized Hill kinetics
+portfolio = quiver.design(behavior, library=library)
+
+grounded = portfolio.circuits[0]
+[node.component_id for node in grounded.nodes if node.component_id]  # the parts this design is built from
+```
+
+The Cello corpus is repressor-only and its sensors carry no measured cooperativity; richer Components
+(activators, sensor `K`/`n`) come from other sources plugged into the same `ComponentLibrary`.
 
 ## Amortize across many targets
 
@@ -158,19 +181,20 @@ target, so a measured curve can replace the simulated objective without touching
 
 Quiver gives you the design loop as composable pieces:
 
-1. The design object (`quiver.grn`): a gene-regulatory network as a bipartite graph of genetic species
-   (regulators, reporters, supplements) and regulatory operators (constitutive, Hill-activated,
-   Hill-repressed, two-input logic, additive), wired into a topology and parameterized by Hill kinetics.
-   This is what a search proposes and mutates, and it maps to buildable parts.
+1. The design object (`quiver.grn`) and its parts (`quiver.component`): a gene-regulatory network as a
+   bipartite graph of genetic species (regulators, reporters, supplements) and regulatory operators
+   (constitutive, Hill-activated, Hill-repressed, two-input logic, additive), wired into a topology and
+   parameterized by Hill kinetics, each stage optionally grounded in a characterized SBOL `Component`. This is
+   what the sampler proposes, and it maps to buildable parts.
 2. The objective (`quiver.objective`): a candidate is scored by simulating its dynamics
    ([LOICA](https://github.com/RudgeLab/LOICA) compiles the network to ODEs and runs a dose-response assay),
    detecting the target behavior, and measuring its robustness and burden. The target is stated in the same
    transfer-function language a synthetic biologist uses, so the objective is a dense, quantitative signal
    and one a bench scientist can read.
-3. The generators (`quiver.generate`, `quiver.learn`): strategies that propose circuits, from classical
-   search and mutation to the diversity-seeking learned samplers (a constructive GFlowNet with either a
-   feature-summary or a graph policy). Scored by the objective and compared on portfolio diversity
-   (`quiver.eval`).
+3. The generator (`quiver.learn`): the diversity-seeking learned sampler, a constructive GFlowNet with either
+   a graph or a feature-summary policy, that proposes circuits scored by the objective. (The non-learned
+   baselines and the evaluation harness the method is measured against live under `quiver.research`, alongside
+   the experiments that validate it.)
 
 ## Where this fits
 
@@ -178,7 +202,7 @@ Quiver occupies the _design_ step of the Design-Build-Test-Learn cycle, in the l
 cycle speaks. You specify a target as a transfer function; Quiver returns a portfolio of distinct topologies
 that meet it in simulation, scored for robustness and buildability rather than tuned to one lucky
 parameterization. A chosen topology is a concrete part list and set of regulatory links to assemble and run
-on a plate reader, and the `quiver.objective.reference` module scores a candidate against a measured
+on a plate reader, and the `quiver.research.objective.reference` module scores a candidate against a measured
 dose-response curve using the same shape metric whether that curve is simulated or measured, reading
 measurements through the Flapjack characterization data model.
 
