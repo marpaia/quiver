@@ -14,15 +14,17 @@ different reasons the set is far more likely to contain one that lands the spec.
 choice of circuit _topology_ as the design problem and optimizes the quality and diversity of the portfolio,
 not its peak score. (A quiver is also a directed graph, which is what a gene-regulatory circuit is.)
 
-Two choices keep the portfolio _buildable_ rather than merely high-scoring on paper. The objective is
+Three choices keep the portfolio _buildable_ rather than merely high-scoring on paper. The objective is
 buildability-aware: a candidate is scored by how robustly its target behavior holds over a parameter
 ensemble, discounted by the metabolic burden its topology puts on the host, so a design that works only at
-one lucky parameterization, or that demands more expression than a cell can spare, scores low. And the policy
+one lucky parameterization, or that demands more expression than a cell can spare, scores low. The policy
 reads circuit physics: the learned generator is a graph neural network over the circuit graph whose nodes
 carry the operator sign and Hill kinetics, so it conditions on the kinetics and wiring a fixed feature
-summary would hide. One policy amortizes across a distribution of targets, so you train once and design any
-target cheaply, and every design round-trips to LOICA and to a circuit-design tool, so a portfolio arrives
-editable, simulable, and ready for build and test.
+summary would hide. And the sampler can assemble each design from characterized **SBOL Components**, choosing
+a real repressor or sensor for every stage as it builds the circuit, so a design arrives as a genuine
+bill of parts whose kinetics are measured values rather than shapes fit on paper. One policy amortizes across
+a distribution of targets, so you train once and design any target cheaply, and every design round-trips to
+LOICA and to a circuit-design tool, so a portfolio arrives editable, simulable, and ready for build and test.
 
 ## From a target to a portfolio of circuits
 
@@ -132,39 +134,58 @@ switch = designer.design(TargetResponse("GFP", ec50=1.0, dynamic_range=100.0, di
 sharp  = designer.design(TargetResponse("GFP", ec50=0.1, dynamic_range=50.0, direction="up"))
 ```
 
-For a sensor target the portfolio is a family of inducible transcriptional cascades of increasing depth:
-`aTc` is sensed by a LOICA `Receiver` that expresses the first transcription factor, which drives a chain of
-`Hill1`-regulated promoters (alternating repression and activation) ending at the `GFP` `Reporter`. Depth is
-the structural axis, so a shallow cascade and a deep one reach the same target by different routes. Two
-distinct members that clear the threshold, drawn as their LOICA wiring (round nodes are the inducer and
-reporter, plain boxes the transcription-factor regulators, slanted boxes the LOICA operators):
+For a sensor target the portfolio is a family of inducible transcriptional cascades of increasing depth: `aTc`
+is sensed by an input sensor that drives a chain of repressor-gate promoters ending at the `GFP` reporter.
+Depth is the structural axis, so a shallow cascade and a deep one reach the same target by different routes.
+Grounded in the Cello Component library, each stage is a real characterized part (slanted boxes the operators,
+labelled by their SBOL Component; round the inducer, stadium the reporter, plain boxes the intermediate
+repressor proteins); the corpus is repressor-only, so the cascades are repressor chains. Two distinct members,
+regenerated from the model by `quiver/research/experiments/readme_diagrams.py`:
 
-A minimal two-stage relay:
+A minimal two-stage cascade:
 
 ```mermaid
 flowchart LR
-  aTc((aTc)) -- senses --> Rc[/Receiver/]
-  Rc -- expresses --> TF1
-  TF1 -. represses .-> P1[/Hill1/]
-  P1 -- expresses --> TF2
-  TF2 -- activates --> P2[/Hill1/]
-  P2 -- expresses --> GFP([GFP])
+  sup(("aTc"))
+  op0[/"aTc_sensor"/]
+  reg0["r0"]
+  op1[/"A1_AmtR"/]
+  reg1["r1"]
+  op2[/"B1_BM3R1"/]
+  out(["GFP"])
+  sup -- senses --> op0
+  op0 -- expresses --> reg0
+  reg0 -. represses .-> op1
+  op1 -- expresses --> reg1
+  reg1 -. represses .-> op2
+  op2 -- expresses --> out
 ```
 
 A four-stage cascade that shifts the switch point:
 
 ```mermaid
 flowchart LR
-  aTc((aTc)) -- senses --> Rc[/Receiver/]
-  Rc -- expresses --> TF1
-  TF1 -. represses .-> P1[/Hill1/]
-  P1 -- expresses --> TF2
-  TF2 -- activates --> P2[/Hill1/]
-  P2 -- expresses --> TF3
-  TF3 -. represses .-> P3[/Hill1/]
-  P3 -- expresses --> TF4
-  TF4 -- activates --> P4[/Hill1/]
-  P4 -- expresses --> GFP([GFP])
+  sup(("aTc"))
+  op0[/"aTc_sensor"/]
+  reg0["r0"]
+  op1[/"A1_AmtR"/]
+  reg1["r1"]
+  op2[/"B1_BM3R1"/]
+  reg2["r2"]
+  op3[/"E1_BetI"/]
+  reg3["r3"]
+  op4[/"F1_AmeR"/]
+  out(["GFP"])
+  sup -- senses --> op0
+  op0 -- expresses --> reg0
+  reg0 -. represses .-> op1
+  op1 -- expresses --> reg1
+  reg1 -. represses .-> op2
+  op2 -- expresses --> reg2
+  reg2 -. represses .-> op3
+  op3 -- expresses --> reg3
+  reg3 -. represses .-> op4
+  op4 -- expresses --> out
 ```
 
 ## Deliver into a build-and-test workflow

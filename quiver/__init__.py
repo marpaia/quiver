@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from quiver.component import Component, ComponentLibrary, apply_component, component_to_params, load_cello
+from quiver.draw import to_mermaid
 from quiver.grn import GRN, NODE_SPECS, Edge, Node, NodeKind, ParamValue, default_params, is_operator
 from quiver.portfolio import Designer, Portfolio, design
 
@@ -23,4 +24,5 @@ __all__ = [
     "design",
     "is_operator",
     "load_cello",
+    "to_mermaid",
 ]
