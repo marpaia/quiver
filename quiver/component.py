@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Literal
 
 from quiver.generate.realizable import clamp_realizable
-from quiver.grn import Node, ParamValue
+from quiver.grn import GRN, Node, ParamValue
 
 ComponentRole = Literal["repressor", "sensor", "reporter"]
 
@@ -157,6 +157,49 @@ def component_to_params(component: Component) -> dict[str, ParamValue]:
 def apply_component(node: Node, component: Component) -> Node:
     """Ground ``node`` in ``component``: stamp its measured kinetics, part name, and id onto the node."""
     return replace(node, name=component.name, params=component_to_params(component), component_id=component.id)
+
+
+def used_regulators(grn: GRN, library: ComponentLibrary) -> set[str]:
+    """The transcription factors / inducers already committed in ``grn`` (from its grounded nodes)."""
+    used: set[str] = set()
+    for node in grn.nodes:
+        if node.component_id is not None:
+            try:
+                used.add(library.by_id(node.component_id).regulator)
+            except KeyError:
+                continue
+    return used
+
+
+def repressor_availability(grn: GRN, library: ComponentLibrary) -> list[bool]:
+    """A per-repressor availability flag aligned to ``library.repressors()``: ``False`` for a repressor whose
+    regulator is already used in ``grn`` (orthogonality --- no transcription factor twice in one circuit)."""
+    used = used_regulators(grn, library)
+    return [component.regulator not in used for component in library.repressors()]
+
+
+def ungrounded_operator_ids(grn: GRN, kind: str = "hill1") -> list[str]:
+    """The ids of operators of ``kind`` not yet grounded in a Component, in node order."""
+    return [node.id for node in grn.nodes if node.kind == kind and node.component_id is None]
+
+
+def ground_operator(grn: GRN, node_id: str, component: Component) -> GRN:
+    """A copy of ``grn`` with the node ``node_id`` grounded in ``component``."""
+    nodes = tuple(apply_component(node, component) if node.id == node_id else node for node in grn.nodes)
+    return replace(grn, nodes=nodes)
+
+
+def ground_sensor(grn: GRN, library: ComponentLibrary, molecule: str) -> GRN:
+    """Ground every ungrounded ``receiver`` in ``grn`` with a sensor Component responding to ``molecule``;
+    a no-op if the library has no such sensor."""
+    sensor = library.sensor_for(molecule)
+    if sensor is None:
+        return grn
+    nodes = tuple(
+        apply_component(node, sensor) if node.kind == "receiver" and node.component_id is None else node
+        for node in grn.nodes
+    )
+    return replace(grn, nodes=nodes)
 
 
 def _optional_float(value: str | None) -> float | None:

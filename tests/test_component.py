@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from quiver.component import ComponentLibrary, apply_component, component_to_params, load_cello
 from quiver.generate.realizable import is_realizable
-from quiver.grn import GRN, Edge, Node
+from quiver.grn import GRN, Node
 
 
 def _library() -> ComponentLibrary:

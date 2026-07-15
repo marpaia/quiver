@@ -34,6 +34,7 @@ from quiver.objective import buildable_objective, dose_response_match, to_loica
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from quiver.component import ComponentLibrary
     from quiver.objective import Behavior, ObjectiveFn, TargetResponse
 
 Design = tuple[GRN, float]
@@ -96,6 +97,8 @@ def design(
     jitter: float = 0.3,
     burden_capacity: float | None = 500.0,
     objective: "ObjectiveFn | None" = None,
+    library: "ComponentLibrary | None" = None,
+    inducer: str = "aTc",
 ) -> Portfolio:
     """Design a portfolio of distinct, high-scoring circuits for ``behavior``.
 
@@ -127,6 +130,8 @@ def design(
         seed=seed,
         beta=beta,
         objective=objective,
+        library=library,
+        inducer=inducer,
     )
     return _portfolio_from(raw, threshold)
 
@@ -153,16 +158,21 @@ def _generate(
     seed: int,
     beta: float,
     objective: "ObjectiveFn | None" = None,
+    library: "ComponentLibrary | None" = None,
+    inducer: str = "aTc",
 ) -> list[Design]:
     name = policy.lower()
     if name in ("gnn", "graph"):
-        gnn_policy = train_gnn(behavior, beta=beta, seed=seed, objective=objective)
+        gnn_policy = train_gnn(behavior, beta=beta, seed=seed, objective=objective, library=library, inducer=inducer)
         rng = random.Random(seed)
-        return [
-            tune_best(grn, behavior, rng, tune_steps, objective=objective)
-            for grn in sample_gnn(gnn_policy, budget, seed=seed)
-        ]
+        candidates = sample_gnn(gnn_policy, budget, seed=seed, library=library, inducer=inducer)
+        # A Component-grounded design's kinetics are the real part values; keep them exact (no parameter
+        # tuning), scoring the grounded circuit directly. Abstract designs still tune their parameters.
+        steps = 0 if library is not None else tune_steps
+        return [tune_best(grn, behavior, rng, steps, objective=objective) for grn in candidates]
     if name in ("mlp", "gflownet", "gfn"):
+        if library is not None:
+            raise ValueError("Component grounding is currently supported only with policy='gnn'")
         mlp_policy = train(behavior, beta=beta, seed=seed, objective=objective)
         rng = random.Random(seed)
         return [

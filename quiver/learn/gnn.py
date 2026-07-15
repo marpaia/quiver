@@ -21,6 +21,13 @@ import random
 
 import torch
 
+from quiver.component import (
+    ComponentLibrary,
+    ground_operator,
+    ground_sensor,
+    repressor_availability,
+    ungrounded_operator_ids,
+)
 from quiver.gfn.env import initial_sensor
 from quiver.gfn.structured_env import MAX_REG, STRUCTURED_ACTIONS, apply_structured_action, available_structured_actions
 from quiver.grn import GRN, Node, ParamValue, is_operator
@@ -149,6 +156,7 @@ class GraphPolicyNet(nn.Module):
         layers: int = 3,
         n_reg: int = MAX_REG,
         cond_dim: int = 0,
+        n_components: int = 0,
     ) -> None:
         super().__init__()
         self.embed = nn.Linear(in_features, hidden)
@@ -158,6 +166,29 @@ class GraphPolicyNet(nn.Module):
         self.rewire_head = nn.Linear(hidden + cond_dim, 1)
         self.n_reg = n_reg
         self.cond_dim = cond_dim
+        # A graph-level head over a fixed Component vocabulary, chosen when a stage is grounded in a real
+        # part; ``n_components == 0`` leaves the policy abstract (no grounding).
+        self.n_components = n_components
+        if n_components > 0:
+            self.component_head = nn.Linear(hidden + cond_dim, n_components)
+
+    def component_logits(
+        self,
+        features: torch.Tensor,
+        forward: torch.Tensor,
+        backward: torch.Tensor,
+        cond: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """A logit per Component in the vocabulary, read from the graph-level readout of the partial circuit
+        (the same message passing as the structural heads), for grounding a stage in a real part."""
+        h = torch.relu(self.embed(features))
+        for layer in self.layers:
+            h = layer(h, forward, backward)
+        readout = h.mean(dim=0)
+        if cond is not None:
+            readout = torch.cat([readout, cond])
+        logits: torch.Tensor = self.component_head(readout)
+        return logits
 
     def forward(
         self,
@@ -222,6 +253,73 @@ def _rollout(
     return grn, log_prob, entropy
 
 
+def _ground_pending(
+    policy: GraphPolicyNet,
+    grn: GRN,
+    library: ComponentLibrary,
+    feature_target: TargetResponse | None,
+    cond: torch.Tensor | None,
+) -> tuple[GRN, torch.Tensor]:
+    """Ground every not-yet-grounded ``hill1`` stage in ``grn`` by sampling a repressor Component from the
+    policy's Component head, masked so a transcription factor is never reused (orthogonality). Returns the
+    grounded circuit and the summed log-probability of the Component choices, so the trajectory balance sees
+    the assignment as part of the forward policy."""
+    reps = library.repressors()
+    log_prob = torch.zeros(())
+    for node_id in ungrounded_operator_ids(grn, "hill1"):
+        available = repressor_availability(grn, library)
+        if not any(available):
+            break
+        features, forward, backward, _ = graph_tensors(grn, 0, 1, feature_target)
+        logits = policy.component_logits(features, forward, backward, cond)
+        mask = torch.tensor([0.0 if ok else float("-inf") for ok in available])
+        log_probs = torch.log_softmax(logits + mask, dim=-1)
+        index = int(torch.multinomial(log_probs.exp(), 1).item())
+        log_prob = log_prob + log_probs[index]
+        grn = ground_operator(grn, node_id, reps[index])
+    return grn, log_prob
+
+
+def _grounded_rollout(
+    policy: GraphPolicyNet,
+    rng: random.Random,
+    max_steps: int,
+    library: ComponentLibrary,
+    inducer: str,
+    target: TargetResponse | None = None,
+    cond_mode: str = "node",
+) -> tuple[GRN, torch.Tensor, torch.Tensor]:
+    """Like :func:`_rollout`, but every stage is grounded in a real SBOL Component as it is built: the input
+    sensor from ``inducer``, and each ``hill1`` stage (the initial one and every relayed one) by a policy
+    Component choice. The trajectory log-probability sums the structural and Component choices, so VarGrad
+    trains the joint topology-and-assignment sampler; the reward is scored on the grounded circuit."""
+    head_cond = target is not None and cond_mode == "head"
+    cond = torch.tensor(target_features(target), dtype=torch.float32) if head_cond and target else None
+    feature_target = None if cond_mode == "head" else target
+    grn = ground_sensor(initial_sensor(), library, inducer)
+    log_prob = torch.zeros(())
+    entropy = torch.zeros(())
+    grn, ground_lp = _ground_pending(policy, grn, library, feature_target, cond)
+    log_prob = log_prob + ground_lp
+    for step in range(max_steps):
+        features, forward, backward, regulator_rows = graph_tensors(grn, step, max_steps, feature_target)
+        logits = policy(features, forward, backward, regulator_rows, cond)
+        mask = torch.full((len(STRUCTURED_ACTIONS),), float("-inf"))
+        for name in available_structured_actions(grn):
+            mask[_ACTION_INDEX[name]] = 0.0
+        log_probs = torch.log_softmax(logits + mask, dim=-1)
+        probs = log_probs.exp()
+        entropy = entropy - (torch.where(probs > 0, log_probs, torch.zeros_like(log_probs)) * probs).sum()
+        index = int(torch.multinomial(probs, 1).item())
+        log_prob = log_prob + log_probs[index]
+        if STRUCTURED_ACTIONS[index] == "stop":
+            break
+        grn = apply_structured_action(grn, STRUCTURED_ACTIONS[index], rng)
+        grn, ground_lp = _ground_pending(policy, grn, library, feature_target, cond)
+        log_prob = log_prob + ground_lp
+    return grn, log_prob, entropy
+
+
 def train(
     behavior: Behavior,
     *,
@@ -234,6 +332,8 @@ def train(
     seed: int = 0,
     objective: ObjectiveFn | None = None,
     entropy_coef: float = 0.0,
+    library: ComponentLibrary | None = None,
+    inducer: str = "aTc",
 ) -> GraphPolicyNet:
     """Train the graph policy to sample topologies in proportion to ``reward ** beta`` (VarGrad).
 
@@ -242,17 +342,25 @@ def train(
     five-number summary), so a run is a head-to-head architecture comparison. ``objective`` sets the reward
     (default the ``score_once`` shape-match); pass :func:`quiver.objective.buildable_objective` to train
     against the buildability-aware signal. ``entropy_coef`` adds a trajectory-entropy bonus that counters the
-    policy concentrating on a few (regulator-cap) topologies at high ``beta``."""
+    policy concentrating on a few (regulator-cap) topologies at high ``beta``.
+
+    When ``library`` is given the sampler is *Component-grounded*: every stage is built from a real SBOL
+    Component (the sensor from ``inducer``, each ``hill1`` from a policy-chosen repressor, orthogonally), and
+    the reward is scored on the grounded circuit."""
     torch.manual_seed(seed)
     rng = random.Random(seed)
-    policy = GraphPolicyNet()
+    n_components = len(library.repressors()) if library is not None else 0
+    policy = GraphPolicyNet(n_components=n_components)
     optimizer = torch.optim.Adam(policy.parameters(), lr=lr)
     for _ in range(steps):
         log_probs = []
         log_rewards = []
         entropies = []
         for _ in range(batch):
-            grn, log_prob, entropy = _rollout(policy, rng, max_steps)
+            if library is not None:
+                grn, log_prob, entropy = _grounded_rollout(policy, rng, max_steps, library, inducer)
+            else:
+                grn, log_prob, entropy = _rollout(policy, rng, max_steps)
             reward = objective(grn) if objective is not None else score_once(grn, behavior)
             log_probs.append(log_prob)
             log_rewards.append(beta * torch.log(torch.tensor(max(reward, 0.0) + floor)))
@@ -261,14 +369,26 @@ def train(
     return policy
 
 
-def sample_terminals(policy: GraphPolicyNet, n: int, *, max_steps: int = 8, seed: int = 0) -> list[GRN]:
-    """Sample ``n`` terminal circuits from a trained graph policy (no gradient)."""
+def sample_terminals(
+    policy: GraphPolicyNet,
+    n: int,
+    *,
+    max_steps: int = 8,
+    seed: int = 0,
+    library: ComponentLibrary | None = None,
+    inducer: str = "aTc",
+) -> list[GRN]:
+    """Sample ``n`` terminal circuits from a trained graph policy (no gradient). With ``library`` the circuits
+    are Component-grounded (must match how the policy was trained)."""
     torch.manual_seed(seed)
     rng = random.Random(seed)
     out: list[GRN] = []
     with torch.no_grad():
         for _ in range(n):
-            grn, _, _ = _rollout(policy, rng, max_steps)
+            if library is not None:
+                grn, _, _ = _grounded_rollout(policy, rng, max_steps, library, inducer)
+            else:
+                grn, _, _ = _rollout(policy, rng, max_steps)
             out.append(grn)
     return out
 
