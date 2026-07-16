@@ -155,6 +155,79 @@ def load_cello(path: Path | None = None) -> ComponentLibrary:
     return ComponentLibrary(tuple(components), name="cello")
 
 
+# The corpus of ECF sigma-factor activators; see data/ecf/README.md for the schema and how to populate it.
+_ECF_PATH = Path(__file__).resolve().parent.parent / "data" / "ecf" / "ecf_activators.csv"
+
+# A nominal OFF expression level (RPU) for a literature component reported only by its fold-change, so a
+# dynamic range can be turned into (ymin, ymax). Only the dynamic range is a real measurement; the absolute
+# level is a placeholder, which is why such components are tagged quality="literature" and the realizable
+# clamp (dimensionless quantities only) is what the objective ultimately trusts.
+_NOMINAL_OFF = 0.05
+
+
+def load_flat_csv(
+    path: Path,
+    *,
+    corpus: str,
+    default_role: ComponentRole = "activator",
+    quality: str = "literature",
+) -> ComponentLibrary:
+    """Load a characterized-component corpus from a flat CSV, the generic ingestion path for literature and
+    third-party corpora (the reusable half of multi-corpus aggregation).
+
+    Columns: ``name`` (required); ``regulator`` (defaults to ``name``); optional ``role`` (defaults to
+    ``default_role``), ``family``, ``organism``, ``K``, ``n``, ``quality``, ``source``; and the levels, given
+    either as ``ymax`` + ``ymin`` or as ``dynamic_range`` alone (then ``ymin`` is a nominal OFF level and
+    ``ymax = ymin * dynamic_range``). Returns an empty library if ``path`` is absent, so a corpus that has not
+    been populated yet is a no-op rather than an error."""
+    if not path.exists():
+        return ComponentLibrary((), name=corpus)
+    components: list[Component] = []
+    for row in csv.DictReader(path.open()):
+        name = (row.get("name") or "").strip()
+        if not name:
+            continue
+        ymax_raw, ymin_raw = _optional_float(row.get("ymax")), _optional_float(row.get("ymin"))
+        dr_raw = _optional_float(row.get("dynamic_range"))
+        if ymax_raw is not None and ymin_raw is not None and ymin_raw > 0:
+            ymin, ymax, dr = ymin_raw, ymax_raw, ymax_raw / ymin_raw
+        elif dr_raw is not None and dr_raw > 0:
+            ymin, ymax, dr = _NOMINAL_OFF, _NOMINAL_OFF * dr_raw, dr_raw
+        else:
+            continue
+        role_raw = (row.get("role") or default_role).strip()
+        valid_role = role_raw in ("repressor", "activator", "sensor", "reporter")
+        role: ComponentRole = role_raw if valid_role else default_role  # type: ignore[assignment]
+        ref = (row.get("source") or "").strip()
+        components.append(
+            Component(
+                id=f"{corpus}:{row.get('id') or name}",
+                name=name,
+                role=role,
+                regulator=(row.get("regulator") or name).strip(),
+                family=(row.get("family") or "").strip(),
+                organism=(row.get("organism") or "").strip(),
+                ymax=ymax,
+                ymin=ymin,
+                K=_optional_float(row.get("K")),
+                n=_optional_float(row.get("n")),
+                dynamic_range=dr,
+                source=f"{corpus}:{ref}" if ref else corpus,
+                quality=(row.get("quality") or quality).strip(),
+            )
+        )
+    return ComponentLibrary(tuple(components), name=corpus)
+
+
+def load_ecf(path: Path | None = None) -> ComponentLibrary:
+    """The ECF sigma-factor activator corpus (``data/ecf``), the activator counterpart to Cello's repressors.
+
+    ECF sigma factors activate their target promoters, so these are ``activator`` Components; merged with
+    :func:`load_cello` they let a design alternate activation and repression instead of forming repressor
+    chains only. Empty until the corpus CSV is populated (see ``data/ecf/README.md``)."""
+    return load_flat_csv(path or _ECF_PATH, corpus="ecf", default_role="activator")
+
+
 def merge(*libraries: ComponentLibrary, name: str) -> ComponentLibrary:
     """Aggregate several corpora into one :class:`ComponentLibrary`, de-duplicating by Component id (first
     occurrence wins). This is how a large, type-rich library is built when no single corpus has everything:
@@ -170,7 +243,7 @@ def merge(*libraries: ComponentLibrary, name: str) -> ComponentLibrary:
 
 
 # The named libraries a saved Designer can reload by name. Composite names (``"a+b"``) merge their parts.
-_LIBRARIES: dict[str, Callable[[], ComponentLibrary]] = {"cello": load_cello}
+_LIBRARIES: dict[str, Callable[[], ComponentLibrary]] = {"cello": load_cello, "ecf": load_ecf}
 
 
 def library_from_name(name: str) -> ComponentLibrary | None:

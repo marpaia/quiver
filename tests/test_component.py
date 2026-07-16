@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+from pathlib import Path
 
 from quiver.component import (
     Component,
@@ -10,6 +11,8 @@ from quiver.component import (
     gate_availability,
     library_from_name,
     load_cello,
+    load_ecf,
+    load_flat_csv,
     merge,
 )
 from quiver.generate.realizable import is_realizable
@@ -171,3 +174,38 @@ def test_library_from_name_merges_composite() -> None:
     # A composite name whose parts are all unknown returns None; a known single name resolves.
     assert library_from_name("cello") is not None
     assert library_from_name("cello+nope") is None
+
+
+def test_load_ecf_is_empty_without_a_corpus_file(tmp_path: Path) -> None:
+    library = load_ecf(tmp_path / "nope.csv")
+    assert len(library) == 0 and library.name == "ecf"
+
+
+def test_load_flat_csv_reads_levels_and_fold_change(tmp_path: Path) -> None:
+    path = tmp_path / "acts.csv"
+    path.write_text(
+        "name,regulator,ymax,ymin,dynamic_range,source,quality\n"
+        "ECF20_992,ECF20,4.0,0.05,,rhodius2013,literature\n"  # explicit levels
+        "ECF11_987,ECF11,,,80,rhodius2013,literature\n"  # fold-change only
+    )
+    library = load_flat_csv(path, corpus="ecf", default_role="activator")
+    assert len(library) == 2 and len(library.activators()) == 2
+    by_name = {c.name: c for c in library.components}
+    explicit = by_name["ECF20_992"]
+    assert explicit.ymax == 4.0 and explicit.ymin == 0.05 and explicit.corpus == "ecf"
+    assert explicit.source == "ecf:rhodius2013" and explicit.quality == "literature"
+    fold = by_name["ECF11_987"]
+    assert abs(fold.dynamic_range - 80.0) < 1e-9 and fold.ymax > fold.ymin  # derived from fold-change
+
+    # An activator from the flat CSV grounds as an activating hill1 (alpha low -> high).
+    alpha = component_to_params(explicit)["alpha"]
+    assert isinstance(alpha, list) and alpha[-1] > alpha[0]
+
+
+def test_flat_csv_corpus_merges_with_cello(tmp_path: Path) -> None:
+    path = tmp_path / "acts.csv"
+    path.write_text("name,regulator,dynamic_range\nECF20_992,ECF20,50\n")
+    ecf = load_flat_csv(path, corpus="ecf", default_role="activator")
+    combined = merge(load_cello(), ecf, name="cello+ecf")
+    assert len(combined.activators()) == 1
+    assert len(combined.gates()) == len(load_cello().repressors()) + 1
