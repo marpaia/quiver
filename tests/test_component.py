@@ -202,6 +202,19 @@ def test_load_flat_csv_reads_levels_and_fold_change(tmp_path: Path) -> None:
     assert isinstance(alpha, list) and alpha[-1] > alpha[0]
 
 
+def test_ecf_corpus_supplies_activators_and_merges_with_cello() -> None:
+    # The shipped ECF corpus (data/ecf) supplies real activator components (Rhodius 2013).
+    ecf = load_ecf()
+    assert len(ecf) >= 30 and ecf.activators() == ecf.gates(), "ECF corpus is all activators"
+    assert all(c.quality == "literature" and c.corpus == "ecf" for c in ecf.components)
+
+    combined = library_from_name("cello+ecf")
+    assert combined is not None
+    assert len(combined.repressors()) == 63 and len(combined.activators()) == len(ecf)
+    # A mixed library lets a stage be an activator or a repressor: gates() spans both.
+    assert len(combined.gates()) == len(combined.repressors()) + len(combined.activators())
+
+
 def test_flat_csv_corpus_merges_with_cello(tmp_path: Path) -> None:
     path = tmp_path / "acts.csv"
     path.write_text("name,regulator,dynamic_range\nECF20_992,ECF20,50\n")

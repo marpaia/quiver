@@ -1,0 +1,33 @@
+name,regulator,role,family,organism,dynamic_range,cognate_promoter,source,quality
+ECF02_915,ECF02_915,activator,ECF,Shewanella amazonensis SB2B,18.525,Pecf02_2817,rhodius2013,literature
+ECF02_2817,ECF02_2817,activator,ECF,Escherichia coli K12,28.836,Pecf02_2817,rhodius2013,literature
+ECF03_1198,ECF03_1198,activator,ECF,Bacteroides thetaiotaomicron VPI-5482,314.084,Pecf03_up1198,rhodius2013,literature
+ECF03_1244,ECF03_1244,activator,ECF,Porphyromonas gingivalis W83,27.693,Pecf03_up1198,rhodius2013,literature
+ECF11_987,ECF11_987,activator,ECF,Vibrio parahaemolyticus RIMD 2210633,232.987,Pecf11_3726,rhodius2013,literature
+ECF11_3726,ECF11_3726,activator,ECF,Pseudomonas syringae pv. tomato str. DC3000,387.036,Pecf11_3726,rhodius2013,literature
+ECF15_436,ECF15_436,activator,ECF,Rhodobacter sphaeroides 2.4.1,137.469,Pecf15_up436,rhodius2013,literature
+ECF15_524,ECF15_524,activator,ECF,Caulobacter crescentus CB15,110.014,Pecf15_up436,rhodius2013,literature
+ECF16_973,ECF16_973,activator,ECF,Pseudomonas putida KT2440,283.525,Pecf16_3622,rhodius2013,literature
+ECF16_3622,ECF16_3622,activator,ECF,Pseudomonas entomophila L48,468.226,Pecf16_3622,rhodius2013,literature
+ECF17_1458,ECF17_1458,activator,ECF,Streptomyces coelicolor A3(2),22.254,Pecf17_up1691,rhodius2013,literature
+ECF17_1691,ECF17_1691,activator,ECF,Mycobacterium tuberculosis H37Rv,45.219,Pecf17_up1691,rhodius2013,literature
+ECF20_992,ECF20_992,activator,ECF,Pseudomonas fluorescens Pf-5,416.928,Pecf20_992,rhodius2013,literature
+ECF20_2913,ECF20_2913,activator,ECF,gamma proteobacterium KT 71,445.806,Pecf20_992,rhodius2013,literature
+ECF22_1147,ECF22_1147,activator,ECF,Xanthomonas axonopodis pv. citri str. 306,54.141,Pecf22_up1147,rhodius2013,literature
+ECF22_4450,ECF22_4450,activator,ECF,Xanthomonas campestris pv. campestris str. ATCC 33913,267.332,Pecf22_up1147,rhodius2013,literature
+ECF25_1643,ECF25_1643,activator,ECF,Nostoc sp. PCC 7120,12.174,Pecf25_up4311,rhodius2013,literature
+ECF25_1645,ECF25_1645,activator,ECF,Synechococcus sp. PCC 7002,11.556,Pecf25_up4311,rhodius2013,literature
+ECF26_837,ECF26_837,activator,ECF,Pseudomonas fluorescens PfO-1,16.618,Pecf26_up601,rhodius2013,literature
+ECF26_4464,ECF26_4464,activator,ECF,Xanthomonas oryzae pv. oryzae KACC10331,308.955,Pecf26_up601,rhodius2013,literature
+ECF29_371,ECF29_371,activator,ECF,Mesorhizobium loti MAFF303099,14.377,Pecf29_up371,rhodius2013,literature
+ECF30_35,ECF30_35,activator,ECF,Bacillus subtilis subsp. subtilis str. 168,103.159,Pecf30_2079,rhodius2013,literature
+ECF30_83,ECF30_83,activator,ECF,Clostridium perfringens str. 13,15.759,Pecf30_2079,rhodius2013,literature
+ECF31_34,ECF31_34,activator,ECF,Bacillus subtilis subsp. subtilis str. 168,177.237,Pecf31_34,rhodius2013,literature
+ECF31_2963,ECF31_2963,activator,ECF,Idiomarina baltica OS145,6.602,Pecf31_34,rhodius2013,literature
+ECF32_1122,ECF32_1122,activator,ECF,Erwinia amylovora,427.238,Pecf32_1122,rhodius2013,literature
+ECF32_3724,ECF32_3724,activator,ECF,Pseudomonas syringae pv. tomato str. DC3000,323.242,Pecf32_1122,rhodius2013,literature
+ECF33_375,ECF33_375,activator,ECF,Bradyrhizobium japonicum USDA 110,141.016,Pecf33_375,rhodius2013,literature
+ECF33_423,ECF33_423,activator,ECF,Rhodopseudomonas palustris CGA009,210.471,Pecf33_375,rhodius2013,literature
+ECF38_1322,ECF38_1322,activator,ECF,Streptomyces coelicolor A3(2),137.958,Pecf38_up1322,rhodius2013,literature
+ECF41_491,ECF41_491,activator,ECF,Caulobacter crescentus CB15,28.949,Pecf41_up1141,rhodius2013,literature
+ECF42_4454,ECF42_4454,activator,ECF,Xanthomonas campestris pv. campestris str. ATCC 33913,56.175,Pecf42_up4062,rhodius2013,literature
