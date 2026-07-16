@@ -2,7 +2,16 @@ from __future__ import annotations
 
 import random
 
-from quiver.component import ComponentLibrary, apply_component, component_to_params, library_from_name, load_cello
+from quiver.component import (
+    Component,
+    ComponentLibrary,
+    apply_component,
+    component_to_params,
+    gate_availability,
+    library_from_name,
+    load_cello,
+    merge,
+)
 from quiver.generate.realizable import is_realizable
 from quiver.grn import GRN, Node, is_operator
 from quiver.learn.gflownet import PolicyNet, _sample_trajectory
@@ -10,6 +19,24 @@ from quiver.learn.gflownet import PolicyNet, _sample_trajectory
 
 def _library() -> ComponentLibrary:
     return load_cello()
+
+
+def _activator(cid: str, regulator: str, ymin: float = 0.05, ymax: float = 5.0) -> Component:
+    return Component(
+        id=cid,
+        name=cid,
+        role="activator",
+        regulator=regulator,
+        family="ECF",
+        organism="Eco",
+        ymax=ymax,
+        ymin=ymin,
+        K=None,
+        n=None,
+        dynamic_range=ymax / ymin,
+        source="ecf:test",
+        quality="literature",
+    )
 
 
 def test_cello_library_counts() -> None:
@@ -99,3 +126,48 @@ def test_component_id_round_trips_and_is_out_of_hashes() -> None:
     ga, gb = GRN(nodes=(a,)), GRN(nodes=(b,))
     assert ga.structural_hash() == gb.structural_hash()
     assert ga.topology_hash() == gb.topology_hash()
+
+
+def test_cello_components_are_measured_quality() -> None:
+    assert all(c.quality == "measured" for c in load_cello().components)
+    assert load_cello().repressors()[0].corpus == "cello"
+
+
+def test_activator_params_activate_and_gates_include_both_roles() -> None:
+    params = component_to_params(_activator("ECF01", "sigma1"))
+    alpha = params["alpha"]
+    assert isinstance(alpha, list) and alpha[-1] > alpha[0], "activator is high-out at high input (alpha=[ymin,ymax])"
+
+    library = ComponentLibrary((_activator("ECF01", "sigma1"),) + load_cello().repressors()[:2], name="mix")
+    gate_ids = {c.id for c in library.gates()}
+    assert "ECF01" in gate_ids and len(library.gates()) == 3, "gates() spans repressors and activators"
+    assert len(library.activators()) == 1
+
+
+def test_merge_aggregates_and_dedups_with_provenance() -> None:
+    cello = load_cello()
+    activators = ComponentLibrary((_activator("ECF01", "sigma1"), _activator("ECF02", "sigma2")), name="ecf")
+    combined = merge(cello, activators, name="cello+ecf")
+    assert len(combined) == len(cello) + 2
+    assert len(combined.activators()) == 2 and len(combined.repressors()) == len(cello.repressors())
+    assert {c.corpus for c in combined.components} == {"cello", "ecf"}
+    # De-dup by id: merging a library with itself does not double it.
+    assert len(merge(activators, activators, name="x")) == 2
+
+
+def test_gate_availability_masks_used_regulator_across_roles() -> None:
+    activator = _activator("ECF01", "sigma1")
+    library = ComponentLibrary((activator,) + load_cello().repressors()[:2], name="mix")
+    # Grounding a node in the activator marks sigma1 used, so the activator becomes unavailable.
+    node = apply_component(Node("op", "hill1", "op"), activator)
+    grn = GRN(nodes=(node,))
+    availability = gate_availability(grn, library)
+    gates = library.gates()
+    used = [g.regulator for g, ok in zip(gates, availability) if not ok]
+    assert "sigma1" in used, "an already-used regulator is masked out regardless of role"
+
+
+def test_library_from_name_merges_composite() -> None:
+    # A composite name whose parts are all unknown returns None; a known single name resolves.
+    assert library_from_name("cello") is not None
+    assert library_from_name("cello+nope") is None

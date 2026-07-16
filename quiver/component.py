@@ -1,15 +1,16 @@
 """The SBOL Component library: characterized genetic Components a design is assembled from.
 
-A :class:`Component` is one characterized part in the SBOL3 sense --- a repressor gate or an input sensor with
-measured Hill kinetics --- that the sampler selects to fill a circuit stage, so a delivered design is a real
-bill-of-Components rather than an abstract role. :func:`load_cello` builds a :class:`ComponentLibrary` from the
-Cello characterization corpus (``data/cello``); :func:`component_to_params` maps a Component's measured
-``(ymax, ymin, K, n)`` onto the GRN/LOICA kinetic parameters of the operator it grounds, and
-:func:`apply_component` stamps a Component's kinetics, name, and id onto a node.
+A :class:`Component` is one characterized part in the SBOL3 sense --- a repressor gate, an activator, or an
+input sensor with measured kinetics --- that the sampler selects to fill a circuit stage, so a delivered
+design is a real bill-of-Components rather than an abstract role. :func:`component_to_params` maps a
+Component's measured ``(ymax, ymin, K, n)`` onto the GRN/LOICA kinetic parameters of the operator it grounds,
+and :func:`apply_component` stamps a Component's kinetics, name, and id onto a node.
 
-The Cello corpus is repressor-only (its gates are NOR inverters) and its sensors carry no ``K``/``n``, so a
-sensor grounds its expression levels from measurement and defaults its cooperativity; richer Components
-(activators, sensor cooperativity) come from other sources (e.g. SynBioHub) plugged into the same library.
+Characterization is scarcer than identity, so no single corpus is both large and rich: :func:`load_cello`
+supplies clean repressor and sensor kinetics but no activators; other corpora contribute the missing types.
+:func:`merge` aggregates several corpora into one library, and every Component carries its ``source`` and a
+``quality`` tag so a benchmark can tell a measured repressor from a literature-sourced activator and filter
+accordingly.
 """
 
 from __future__ import annotations
@@ -22,7 +23,9 @@ from typing import Callable, Literal
 from quiver.generate.realizable import clamp_realizable
 from quiver.grn import GRN, Node, ParamValue
 
-ComponentRole = Literal["repressor", "sensor", "reporter"]
+# A Component's regulatory role. Repressors and activators are *gates* (a regulator drives a promoter);
+# sensors are the inducible input layer; reporters are outputs.
+ComponentRole = Literal["repressor", "activator", "sensor", "reporter"]
 
 # The Cello corpus shipped in the repo; see data/cello/README.md.
 _CELLO_PATH = Path(__file__).resolve().parent.parent / "data" / "cello" / "cello_kinetics.csv"
@@ -54,6 +57,14 @@ class Component:
     n: float | None
     dynamic_range: float
     source: str
+    # How the kinetics were obtained, for cross-corpus provenance: "measured" (a fitted response function),
+    # "fitted" (fit here from induction curves), or "literature" (read from a paper's reported values).
+    quality: str = "measured"
+
+    @property
+    def corpus(self) -> str:
+        """The coarse source corpus (the ``source`` prefix, e.g. ``"cello"`` from ``"cello:Eco1C1G1T1..."``)."""
+        return self.source.split(":", 1)[0]
 
 
 @dataclass(frozen=True)
@@ -76,8 +87,18 @@ class ComponentLibrary:
         raise KeyError(component_id)
 
     def repressors(self) -> tuple[Component, ...]:
-        """The repressor-gate Components, ordered by id (the stable head index for stage selection)."""
+        """The repressor-gate Components, ordered by id."""
         return tuple(sorted((c for c in self.components if c.role == "repressor"), key=lambda c: c.id))
+
+    def activators(self) -> tuple[Component, ...]:
+        """The activator-gate Components, ordered by id."""
+        return tuple(sorted((c for c in self.components if c.role == "activator"), key=lambda c: c.id))
+
+    def gates(self) -> tuple[Component, ...]:
+        """The gate Components a promoter stage can be grounded in --- repressors and activators together,
+        ordered by id (the stable head index the sampler's Component selection addresses). A mixed library
+        lets the policy choose activation or repression per stage, not just repressor chains."""
+        return tuple(sorted((c for c in self.components if c.role in ("repressor", "activator")), key=lambda c: c.id))
 
     def sensors(self) -> tuple[Component, ...]:
         """The input-sensor Components, ordered by id."""
@@ -134,38 +155,55 @@ def load_cello(path: Path | None = None) -> ComponentLibrary:
     return ComponentLibrary(tuple(components), name="cello")
 
 
-# The named libraries a saved Designer can reload by name.
+def merge(*libraries: ComponentLibrary, name: str) -> ComponentLibrary:
+    """Aggregate several corpora into one :class:`ComponentLibrary`, de-duplicating by Component id (first
+    occurrence wins). This is how a large, type-rich library is built when no single corpus has everything:
+    e.g. ``merge(load_cello(), load_ecf(), name="cello+ecf")`` for repressors, sensors, and activators."""
+    seen: set[str] = set()
+    components: list[Component] = []
+    for library in libraries:
+        for component in library.components:
+            if component.id not in seen:
+                seen.add(component.id)
+                components.append(component)
+    return ComponentLibrary(tuple(components), name=name)
+
+
+# The named libraries a saved Designer can reload by name. Composite names (``"a+b"``) merge their parts.
 _LIBRARIES: dict[str, Callable[[], ComponentLibrary]] = {"cello": load_cello}
 
 
 def library_from_name(name: str) -> ComponentLibrary | None:
     """Rebuild a named :class:`ComponentLibrary` (as recorded by a saved Designer), or ``None`` if the name
-    is empty or unknown."""
-    loader = _LIBRARIES.get(name)
-    return loader() if loader is not None else None
+    is empty or unknown. A ``"+"``-joined name merges its named parts (e.g. ``"cello+ecf"``)."""
+    if not name:
+        return None
+    parts = name.split("+")
+    loaders = [_LIBRARIES.get(part) for part in parts]
+    if any(loader is None for loader in loaders):
+        return None
+    libraries = [loader() for loader in loaders if loader is not None]
+    if len(libraries) == 1:
+        return libraries[0]
+    return merge(*libraries, name=name)
 
 
 def component_to_params(component: Component) -> dict[str, ParamValue]:
     """The GRN/LOICA kinetic parameters realizing ``component``, clamped to the realizable envelope.
 
-    A repressor grounds a ``hill1`` operator with ``alpha = [ymax, ymin]`` (output high when its input is low
-    --- the inverter sign convention); a sensor grounds a ``receiver`` with ``alpha = [ymin, ymax]``
-    (activation by its inducer). A sensor's ``K``/``n`` default when the source did not characterize them.
+    A repressor grounds a ``hill1`` with ``alpha = [ymax, ymin]`` (output high when its input is low, the
+    inverter sign); an activator grounds a ``hill1`` with ``alpha = [ymin, ymax]`` (output high when its input
+    is high); a sensor grounds a ``receiver`` with ``alpha = [ymin, ymax]`` (activation by its inducer).
+    ``K``/``n`` default when the source did not characterize them.
     """
+    k = component.K if component.K is not None else _DEFAULT_SENSOR_K
+    n = component.n if component.n is not None else _DEFAULT_SENSOR_N
     if component.role == "repressor":
-        params: dict[str, ParamValue] = {
-            "alpha": [component.ymax, component.ymin],
-            "K": component.K if component.K is not None else _DEFAULT_SENSOR_K,
-            "n": component.n if component.n is not None else _DEFAULT_SENSOR_N,
-        }
-        return clamp_realizable("hill1", params)
+        return clamp_realizable("hill1", {"alpha": [component.ymax, component.ymin], "K": k, "n": n})
+    if component.role == "activator":
+        return clamp_realizable("hill1", {"alpha": [component.ymin, component.ymax], "K": k, "n": n})
     if component.role == "sensor":
-        params = {
-            "alpha": [component.ymin, component.ymax],
-            "K": component.K if component.K is not None else _DEFAULT_SENSOR_K,
-            "n": component.n if component.n is not None else _DEFAULT_SENSOR_N,
-        }
-        return clamp_realizable("receiver", params)
+        return clamp_realizable("receiver", {"alpha": [component.ymin, component.ymax], "K": k, "n": n})
     raise ValueError(f"component role {component.role!r} has no operator kinetics")
 
 
@@ -186,11 +224,12 @@ def used_regulators(grn: GRN, library: ComponentLibrary) -> set[str]:
     return used
 
 
-def repressor_availability(grn: GRN, library: ComponentLibrary) -> list[bool]:
-    """A per-repressor availability flag aligned to ``library.repressors()``: ``False`` for a repressor whose
-    regulator is already used in ``grn`` (orthogonality --- no transcription factor twice in one circuit)."""
+def gate_availability(grn: GRN, library: ComponentLibrary) -> list[bool]:
+    """A per-gate availability flag aligned to ``library.gates()`` (repressors and activators): ``False`` for a
+    gate whose regulator is already used in ``grn`` (orthogonality --- no transcription factor twice in one
+    circuit). This is the mask the sampler's Component head applies when grounding a promoter stage."""
     used = used_regulators(grn, library)
-    return [component.regulator not in used for component in library.repressors()]
+    return [component.regulator not in used for component in library.gates()]
 
 
 def ungrounded_operator_ids(grn: GRN, kind: str = "hill1") -> list[str]:

@@ -23,9 +23,9 @@ import torch
 
 from quiver.component import (
     ComponentLibrary,
+    gate_availability,
     ground_operator,
     ground_sensor,
-    repressor_availability,
     ungrounded_operator_ids,
 )
 from quiver.gfn.env import initial_sensor
@@ -260,14 +260,14 @@ def _ground_pending(
     feature_target: TargetResponse | None,
     cond: torch.Tensor | None,
 ) -> tuple[GRN, torch.Tensor]:
-    """Ground every not-yet-grounded ``hill1`` stage in ``grn`` by sampling a repressor Component from the
-    policy's Component head, masked so a transcription factor is never reused (orthogonality). Returns the
-    grounded circuit and the summed log-probability of the Component choices, so the trajectory balance sees
+    """Ground every not-yet-grounded ``hill1`` stage in ``grn`` by sampling a gate Component (repressor or
+    activator) from the policy's Component head, masked so a transcription factor is never reused
+    (orthogonality). Returns the grounded circuit and the summed log-probability of the choices, so balance sees
     the assignment as part of the forward policy."""
-    reps = library.repressors()
+    reps = library.gates()
     log_prob = torch.zeros(())
     for node_id in ungrounded_operator_ids(grn, "hill1"):
-        available = repressor_availability(grn, library)
+        available = gate_availability(grn, library)
         if not any(available):
             break
         features, forward, backward, _ = graph_tensors(grn, 0, 1, feature_target)
@@ -345,11 +345,11 @@ def train(
     policy concentrating on a few (regulator-cap) topologies at high ``beta``.
 
     When ``library`` is given the sampler is *Component-grounded*: every stage is built from a real SBOL
-    Component (the sensor from ``inducer``, each ``hill1`` from a policy-chosen repressor, orthogonally), and
-    the reward is scored on the grounded circuit."""
+    Component (the sensor from ``inducer``, each ``hill1`` from a policy-chosen gate --- repressor or
+    activator --- orthogonally), and the reward is scored on the grounded circuit."""
     torch.manual_seed(seed)
     rng = random.Random(seed)
-    n_components = len(library.repressors()) if library is not None else 0
+    n_components = len(library.gates()) if library is not None else 0
     policy = GraphPolicyNet(n_components=n_components)
     optimizer = torch.optim.Adam(policy.parameters(), lr=lr)
     for _ in range(steps):

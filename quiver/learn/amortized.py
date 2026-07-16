@@ -87,7 +87,7 @@ def train_conditioned(
     bill-of-Components with no retraining."""
     torch.manual_seed(seed)
     rng = random.Random(seed)
-    n_components = len(library.repressors()) if library is not None else 0
+    n_components = len(library.gates()) if library is not None else 0
     policy = PolicyNet(in_features=_CONDITIONED_FEATURES, n_components=n_components)
     optimizer = torch.optim.Adam(policy.parameters(), lr=lr)
     for step in range(steps):
