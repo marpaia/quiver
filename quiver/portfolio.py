@@ -1,11 +1,11 @@
 """The high-level design entry point: turn a behavior objective into a portfolio of distinct circuits.
 
-``design(behavior)`` is the one call an end user needs. It runs a generator, keeps the best score per
-distinct topology, filters to the ones that clear a pass threshold, and ranks them, returning a
-:class:`Portfolio` whose circuits compile straight to LOICA. The default generator is the diversity-seeking
-constructive GFlowNet; ``method="evolutionary"`` and ``"random"`` are non-learned baselines. To design many
-targets without retraining, train a :class:`Designer` once and reuse it, or load a pretrained one from the
-Hugging Face Hub.
+``design(behavior)`` is the one call an end user needs. It trains the diversity-seeking constructive GFlowNet,
+keeps the best score per distinct topology, filters to the ones that clear a pass threshold, and ranks them,
+returning a :class:`Portfolio` whose circuits compile straight to LOICA. ``policy`` selects the policy
+representation (``"gnn"`` or ``"mlp"``), and a ``library`` grounds every stage in a real SBOL Component. To
+design many targets without retraining, train a :class:`Designer` once and reuse it, or load a pretrained one
+from the Hugging Face Hub.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any, Iterator
 import torch
 from huggingface_hub import ModelHubMixin
 
+from quiver.component import library_from_name
 from quiver.generate import tune_best
 from quiver.grn import GRN
 from quiver.learn.amortized import sample_conditioned, train_conditioned
@@ -162,23 +163,18 @@ def _generate(
     inducer: str = "aTc",
 ) -> list[Design]:
     name = policy.lower()
+    # A Component-grounded design's kinetics are the real part values, so keep them exact (no parameter
+    # tuning) and score the grounded circuit directly; an abstract design still tunes its parameters.
+    steps = 0 if library is not None else tune_steps
+    rng = random.Random(seed)
     if name in ("gnn", "graph"):
         gnn_policy = train_gnn(behavior, beta=beta, seed=seed, objective=objective, library=library, inducer=inducer)
-        rng = random.Random(seed)
         candidates = sample_gnn(gnn_policy, budget, seed=seed, library=library, inducer=inducer)
-        # A Component-grounded design's kinetics are the real part values; keep them exact (no parameter
-        # tuning), scoring the grounded circuit directly. Abstract designs still tune their parameters.
-        steps = 0 if library is not None else tune_steps
         return [tune_best(grn, behavior, rng, steps, objective=objective) for grn in candidates]
     if name in ("mlp", "gflownet", "gfn"):
-        if library is not None:
-            raise ValueError("Component grounding is currently supported only with policy='gnn'")
-        mlp_policy = train(behavior, beta=beta, seed=seed, objective=objective)
-        rng = random.Random(seed)
-        return [
-            tune_best(grn, behavior, rng, tune_steps, objective=objective)
-            for grn in sample_terminals(mlp_policy, budget, seed=seed)
-        ]
+        mlp_policy = train(behavior, beta=beta, seed=seed, objective=objective, library=library, inducer=inducer)
+        candidates = sample_terminals(mlp_policy, budget, seed=seed, library=library, inducer=inducer)
+        return [tune_best(grn, behavior, rng, steps, objective=objective) for grn in candidates]
     raise ValueError(f"unknown policy {policy!r}; choose 'gnn' or 'mlp'")
 
 
@@ -195,13 +191,23 @@ class Designer(ModelHubMixin):  # type: ignore[misc]
     publishes it (all inherited from ``ModelHubMixin``).
     """
 
-    def __init__(self, policy: Any, max_steps: int = 8, arch: str = "mlp") -> None:
+    def __init__(
+        self,
+        policy: Any,
+        max_steps: int = 8,
+        arch: str = "mlp",
+        library: "ComponentLibrary | None" = None,
+        inducer: str = "aTc",
+    ) -> None:
         self.policy = policy
         self.max_steps = max_steps
         self.arch = arch
+        self.library = library
+        self.inducer = inducer
 
     def __repr__(self) -> str:
-        return f"Designer(trained, arch={self.arch!r}, max_steps={self.max_steps})"
+        grounded = f", grounded in {self.library.name!r}" if self.library is not None else ""
+        return f"Designer(trained, arch={self.arch!r}, max_steps={self.max_steps}{grounded})"
 
     @classmethod
     def train(
@@ -214,15 +220,36 @@ class Designer(ModelHubMixin):  # type: ignore[misc]
         max_steps: int = 8,
         seed: int = 0,
         arch: str = "mlp",
+        library: "ComponentLibrary | None" = None,
+        inducer: str = "aTc",
     ) -> "Designer":
         """Train a target-conditioned policy across ``targets`` (uses ``steps * batch`` simulations, once).
 
         ``arch`` selects the policy representation: ``"mlp"`` (default) is the feature-summary policy
         (:mod:`quiver.learn.amortized`); ``"gnn"`` is the graph policy over the circuit graph
-        (:mod:`quiver.learn.gnn`), which reads each node's kinetics and signed wiring."""
-        trainer: Any = train_gnn_conditioned if arch == "gnn" else train_conditioned
-        policy = trainer(list(targets), steps=steps, batch=batch, beta=beta, max_steps=max_steps, seed=seed)
-        return cls(policy=policy, max_steps=max_steps, arch=arch)
+        (:mod:`quiver.learn.gnn`), which reads each node's kinetics and signed wiring.
+
+        With ``library`` the amortized policy is Component-grounded: it designs every target as a real
+        bill-of-Components with no retraining. Grounding is supported for the ``"mlp"`` arch (the stronger
+        amortizer); pass no ``library`` for the graph arch."""
+        if library is not None and arch == "gnn":
+            raise ValueError("Component-grounded amortization is currently supported only with arch='mlp'")
+        if arch == "gnn":
+            policy = train_gnn_conditioned(
+                list(targets), steps=steps, batch=batch, beta=beta, max_steps=max_steps, seed=seed
+            )
+        else:
+            policy = train_conditioned(
+                list(targets),
+                steps=steps,
+                batch=batch,
+                beta=beta,
+                max_steps=max_steps,
+                seed=seed,
+                library=library,
+                inducer=inducer,
+            )
+        return cls(policy=policy, max_steps=max_steps, arch=arch, library=library, inducer=inducer)
 
     def design(
         self,
@@ -233,12 +260,24 @@ class Designer(ModelHubMixin):  # type: ignore[misc]
         tune_steps: int = 2,
         seed: int = 0,
     ) -> Portfolio:
-        """Design a portfolio for ``target`` by sampling the trained policy; no retraining."""
+        """Design a portfolio for ``target`` by sampling the trained policy; no retraining. A
+        Component-grounded designer returns designs built from real parts, with kinetics kept exact."""
         behavior = dose_response_match(target)
         rng = random.Random(seed)
-        sampler: Any = sample_gnn_conditioned if self.arch == "gnn" else sample_conditioned
-        candidates = sampler(self.policy, target, budget, max_steps=self.max_steps, seed=seed)
-        raw = [tune_best(grn, behavior, rng, tune_steps) for grn in candidates]
+        steps = 0 if self.library is not None else tune_steps
+        if self.arch == "gnn":
+            candidates = sample_gnn_conditioned(self.policy, target, budget, max_steps=self.max_steps, seed=seed)
+        else:
+            candidates = sample_conditioned(
+                self.policy,
+                target,
+                budget,
+                max_steps=self.max_steps,
+                seed=seed,
+                library=self.library,
+                inducer=self.inducer,
+            )
+        raw = [tune_best(grn, behavior, rng, steps) for grn in candidates]
         return _portfolio_from(raw, threshold)
 
     def _save_pretrained(self, save_directory: Path) -> None:
@@ -249,6 +288,8 @@ class Designer(ModelHubMixin):  # type: ignore[misc]
             "quiver_version": _quiver_version(),
             "max_steps": self.max_steps,
             "arch": self.arch,
+            "library": self.library.name if self.library is not None else None,
+            "inducer": self.inducer,
         }
         if self.arch == "gnn":
             config.update(
@@ -267,6 +308,7 @@ class Designer(ModelHubMixin):  # type: ignore[misc]
                     "in_features": layers[0].in_features,
                     "hidden": layers[0].out_features,
                     "n_actions": layers[-1].out_features,
+                    "n_components": self.policy.n_components,
                 }
             )
         (save_directory / "config.json").write_text(json.dumps(config, indent=2))
@@ -298,11 +340,17 @@ class Designer(ModelHubMixin):  # type: ignore[misc]
             )
         else:
             policy = PolicyNet(
-                in_features=config["in_features"], hidden=config["hidden"], n_actions=config["n_actions"]
+                in_features=config["in_features"],
+                hidden=config["hidden"],
+                n_actions=config["n_actions"],
+                n_components=config.get("n_components", 0),
             )
         policy.load_state_dict(torch.load(directory / "policy.pt", map_location="cpu"))
         policy.eval()
-        return cls(policy, max_steps=config["max_steps"], arch=arch)
+        library = library_from_name(config.get("library") or "")
+        return cls(
+            policy, max_steps=config["max_steps"], arch=arch, library=library, inducer=config.get("inducer", "aTc")
+        )
 
 
 def _quiver_version() -> str:

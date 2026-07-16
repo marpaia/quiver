@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from quiver.component import ComponentLibrary, apply_component, component_to_params, load_cello
+import random
+
+from quiver.component import ComponentLibrary, apply_component, component_to_params, library_from_name, load_cello
 from quiver.generate.realizable import is_realizable
-from quiver.grn import GRN, Node
+from quiver.grn import GRN, Node, is_operator
+from quiver.learn.gflownet import PolicyNet, _sample_trajectory
 
 
 def _library() -> ComponentLibrary:
@@ -61,6 +64,26 @@ def test_orthogonality_key_is_the_regulator() -> None:
     library = _library()
     regulators = [c.regulator for c in library.repressors()]
     assert len(set(regulators)) < len(regulators), "the corpus has multiple gate variants per regulator"
+
+
+def test_library_reloads_by_name() -> None:
+    assert load_cello().name == "cello"
+    reloaded = library_from_name("cello")
+    assert reloaded is not None and len(reloaded) == len(load_cello())
+    assert library_from_name("") is None and library_from_name("unknown") is None
+
+
+def test_mlp_grounded_rollout_builds_orthogonal_component_circuit() -> None:
+    # The MLP grounded rollout is torch-only (no simulation): the feature-summary policy grounds every stage.
+    library = load_cello()
+    policy = PolicyNet(n_components=len(library.repressors()))
+    grn, log_prob = _sample_trajectory(policy, random.Random(0), 6, library=library, inducer="aTc")
+
+    operators = [n for n in grn.nodes if is_operator(n.kind)]
+    assert operators and all(n.component_id is not None for n in operators), "every operator is grounded"
+    regulators = [library.by_id(n.component_id).regulator for n in grn.nodes if n.component_id is not None]
+    assert len(regulators) == len(set(regulators)), "no transcription factor is reused (orthogonality)"
+    assert bool(log_prob.isfinite())
 
 
 def test_component_id_round_trips_and_is_out_of_hashes() -> None:

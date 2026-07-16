@@ -17,7 +17,7 @@ from __future__ import annotations
 import csv
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Literal
+from typing import Callable, Literal
 
 from quiver.generate.realizable import clamp_realizable
 from quiver.grn import GRN, Node, ParamValue
@@ -58,9 +58,13 @@ class Component:
 
 @dataclass(frozen=True)
 class ComponentLibrary:
-    """A collection of characterized Components (an SBOL Collection) the sampler draws from."""
+    """A collection of characterized Components (an SBOL Collection) the sampler draws from.
+
+    ``name`` identifies the source so a trained :class:`~quiver.portfolio.Designer` can record which library it
+    was grounded in and reload it (see :func:`library_from_name`)."""
 
     components: tuple[Component, ...]
+    name: str = ""
 
     def __len__(self) -> int:
         return len(self.components)
@@ -127,7 +131,18 @@ def load_cello(path: Path | None = None) -> ComponentLibrary:
                 source=f"cello:{row['ucf']}",
             )
         )
-    return ComponentLibrary(tuple(components))
+    return ComponentLibrary(tuple(components), name="cello")
+
+
+# The named libraries a saved Designer can reload by name.
+_LIBRARIES: dict[str, Callable[[], ComponentLibrary]] = {"cello": load_cello}
+
+
+def library_from_name(name: str) -> ComponentLibrary | None:
+    """Rebuild a named :class:`ComponentLibrary` (as recorded by a saved Designer), or ``None`` if the name
+    is empty or unknown."""
+    loader = _LIBRARIES.get(name)
+    return loader() if loader is not None else None
 
 
 def component_to_params(component: Component) -> dict[str, ParamValue]:

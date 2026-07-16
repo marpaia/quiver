@@ -18,8 +18,15 @@ from typing import Callable
 
 import torch
 
+from quiver.component import (
+    ComponentLibrary,
+    ground_operator,
+    ground_sensor,
+    repressor_availability,
+    ungrounded_operator_ids,
+)
 from quiver.generate.optimize import tune_score
-from quiver.gfn.env import ACTIONS, apply_action, available_actions
+from quiver.gfn.env import ACTIONS, apply_action, available_actions, initial_sensor
 from quiver.grn import GRN, is_operator
 from quiver.learn._core import rollout, vargrad_step
 from quiver.objective import Behavior, ObjectiveFn, score_once
@@ -28,6 +35,12 @@ nn = torch.nn
 
 _ACTION_INDEX = {name: index for index, name in enumerate(ACTIONS)}
 _N_FEATURES = 5
+
+# A function mapping a partial circuit and step to the policy's feature vector.
+Encoder = Callable[[GRN, int], list[float]]
+# A grounding hook: ground any new stage in a Component, returning the grounded circuit and the log-probability
+# of the Component choices.
+Grounder = Callable[[GRN], tuple[GRN, torch.Tensor]]
 
 
 def features(grn: GRN, step: int, max_steps: int) -> list[float]:
@@ -40,27 +53,99 @@ def features(grn: GRN, step: int, max_steps: int) -> list[float]:
 
 
 class PolicyNet(nn.Module):
-    """A small MLP over circuit features producing a logit per construction action."""
+    """A small MLP over circuit features producing a logit per construction action.
 
-    def __init__(self, in_features: int = _N_FEATURES, hidden: int = 32, n_actions: int = len(ACTIONS)) -> None:
+    With ``n_components > 0`` it also carries a Component head over a fixed Component vocabulary, read from the
+    same feature summary, so the feature-summary policy can ground each stage in a real part; ``n_components
+    == 0`` leaves it abstract."""
+
+    def __init__(
+        self,
+        in_features: int = _N_FEATURES,
+        hidden: int = 32,
+        n_actions: int = len(ACTIONS),
+        n_components: int = 0,
+    ) -> None:
         super().__init__()
         self.net = nn.Sequential(nn.Linear(in_features, hidden), nn.ReLU(), nn.Linear(hidden, n_actions))
+        self.n_components = n_components
+        if n_components > 0:
+            self.component_net = nn.Sequential(
+                nn.Linear(in_features, hidden), nn.ReLU(), nn.Linear(hidden, n_components)
+            )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         logits: torch.Tensor = self.net(x)
         return logits
 
+    def component_logits(self, x: torch.Tensor) -> torch.Tensor:
+        """A logit per Component in the vocabulary, from the circuit's feature summary."""
+        logits: torch.Tensor = self.component_net(x)
+        return logits
 
-def _sample_trajectory(policy: PolicyNet, rng: random.Random, max_steps: int) -> tuple[GRN, torch.Tensor]:
+
+def make_grounder(policy: PolicyNet, library: ComponentLibrary, encode: Encoder) -> Grounder:
+    """A grounding hook for :func:`quiver.learn._core.rollout`: ground every not-yet-grounded ``hill1`` stage
+    by sampling a repressor from ``policy``'s Component head, masked so no transcription factor is reused
+    (orthogonality). Returns the grounded circuit and the summed log-probability of the Component choices."""
+    reps = library.repressors()
+
+    def ground(grn: GRN) -> tuple[GRN, torch.Tensor]:
+        log_prob = torch.zeros(())
+        for node_id in ungrounded_operator_ids(grn, "hill1"):
+            available = repressor_availability(grn, library)
+            if not any(available):
+                break
+            feats = torch.tensor(encode(grn, 0), dtype=torch.float32)
+            logits = policy.component_logits(feats)
+            mask = torch.tensor([0.0 if ok else float("-inf") for ok in available])
+            log_probs = torch.log_softmax(logits + mask, dim=-1)
+            index = int(torch.multinomial(log_probs.exp(), 1).item())
+            log_prob = log_prob + log_probs[index]
+            grn = ground_operator(grn, node_id, reps[index])
+        return grn, log_prob
+
+    return ground
+
+
+def grounding_hooks(
+    policy: PolicyNet, library: ComponentLibrary | None, inducer: str, encode: Encoder
+) -> tuple[Callable[[], GRN] | None, Grounder | None]:
+    """The ``(initial, ground)`` hooks passed to :func:`quiver.learn._core.rollout`: with a ``library`` the
+    initial circuit has its sensor grounded and each stage is grounded via ``policy``'s Component head;
+    ``(None, None)`` for an abstract rollout."""
+    if library is None:
+        return None, None
+
+    def initial() -> GRN:
+        return ground_sensor(initial_sensor(), library, inducer)
+
+    return initial, make_grounder(policy, library, encode)
+
+
+def _sample_trajectory(
+    policy: PolicyNet,
+    rng: random.Random,
+    max_steps: int,
+    *,
+    library: ComponentLibrary | None = None,
+    inducer: str = "aTc",
+) -> tuple[GRN, torch.Tensor]:
+    def encode(grn: GRN, step: int) -> list[float]:
+        return features(grn, step, max_steps)
+
+    initial, ground = grounding_hooks(policy, library, inducer, encode)
     return rollout(
         policy,
         actions=ACTIONS,
         action_index=_ACTION_INDEX,
         available=available_actions,
         apply=apply_action,
-        encode=lambda grn, step: features(grn, step, max_steps),
+        encode=encode,
         rng=rng,
         max_steps=max_steps,
+        initial=initial,
+        ground=ground,
     )
 
 
@@ -76,6 +161,8 @@ def train(
     seed: int = 0,
     gate: Callable[[GRN], float] | None = None,
     objective: ObjectiveFn | None = None,
+    library: ComponentLibrary | None = None,
+    inducer: str = "aTc",
 ) -> PolicyNet:
     """Train a policy to sample topologies in proportion to ``reward ** beta`` (VarGrad). Uses
     ``steps * batch`` reward evaluations.
@@ -86,18 +173,21 @@ def train(
     per evaluation, so training simulation count scales accordingly.
 
     ``gate`` optionally multiplies each candidate's reward by a topology-dependent factor before tempering,
-    steering the policy toward topologies a structural certificate favors (see
-    :func:`quiver.objective.certificate.monotone_gate`).
-    """
+    steering the policy toward topologies a structural certificate favors.
+
+    When ``library`` is given the sampler is *Component-grounded*: every stage is built from a real SBOL
+    Component (the sensor from ``inducer``, each ``hill1`` from a policy-chosen repressor, orthogonally), and
+    the reward is scored on the grounded circuit."""
     torch.manual_seed(seed)
     rng = random.Random(seed)
-    policy = PolicyNet()
+    n_components = len(library.repressors()) if library is not None else 0
+    policy = PolicyNet(n_components=n_components)
     optimizer = torch.optim.Adam(policy.parameters(), lr=lr)
     for _ in range(steps):
         log_probs = []
         log_rewards = []
         for _ in range(batch):
-            grn, log_prob = _sample_trajectory(policy, rng, max_steps)
+            grn, log_prob = _sample_trajectory(policy, rng, max_steps, library=library, inducer=inducer)
             reward = objective(grn) if objective is not None else score_once(grn, behavior)
             if gate is not None:
                 reward *= gate(grn)
@@ -107,14 +197,23 @@ def train(
     return policy
 
 
-def sample_terminals(policy: PolicyNet, n: int, *, max_steps: int = 8, seed: int = 0) -> list[GRN]:
-    """Sample ``n`` terminal circuits from a trained policy (no gradient)."""
+def sample_terminals(
+    policy: PolicyNet,
+    n: int,
+    *,
+    max_steps: int = 8,
+    seed: int = 0,
+    library: ComponentLibrary | None = None,
+    inducer: str = "aTc",
+) -> list[GRN]:
+    """Sample ``n`` terminal circuits from a trained policy (no gradient). With ``library`` the circuits are
+    Component-grounded (must match how the policy was trained)."""
     torch.manual_seed(seed)
     rng = random.Random(seed)
     out: list[GRN] = []
     with torch.no_grad():
         for _ in range(n):
-            grn, _ = _sample_trajectory(policy, rng, max_steps)
+            grn, _ = _sample_trajectory(policy, rng, max_steps, library=library, inducer=inducer)
             out.append(grn)
     return out
 

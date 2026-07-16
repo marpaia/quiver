@@ -27,12 +27,22 @@ def rollout(
     encode: Callable[[GRN, int], list[float]],
     rng: random.Random,
     max_steps: int,
+    initial: Callable[[], GRN] | None = None,
+    ground: Callable[[GRN], tuple[GRN, torch.Tensor]] | None = None,
 ) -> tuple[GRN, torch.Tensor]:
     """Sample one construction trajectory to a terminal circuit, returning it and its log-probability under
     ``policy``. ``encode`` maps ``(grn, step)`` to the policy's feature vector, ``available`` lists the
-    actions legal in a state, and ``apply`` performs a chosen non-``stop`` action."""
-    grn = initial_sensor()
+    actions legal in a state, and ``apply`` performs a chosen non-``stop`` action.
+
+    ``initial`` overrides the starting circuit (default the abstract :func:`initial_sensor`). ``ground``, if
+    given, is called on the initial circuit and after every applied action to ground any new stage in a
+    Component; its returned log-probability is folded into the trajectory's, so a Component-grounded rollout
+    trains the joint topology-and-assignment sampler under the same VarGrad loss."""
+    grn = initial() if initial is not None else initial_sensor()
     log_prob = torch.zeros(())
+    if ground is not None:
+        grn, ground_lp = ground(grn)
+        log_prob = log_prob + ground_lp
     for step in range(max_steps):
         feats = torch.tensor(encode(grn, step), dtype=torch.float32)
         mask = torch.full((len(actions),), float("-inf"))
@@ -44,6 +54,9 @@ def rollout(
         if actions[index] == "stop":
             break
         grn = apply(grn, actions[index], rng)
+        if ground is not None:
+            grn, ground_lp = ground(grn)
+            log_prob = log_prob + ground_lp
     return grn, log_prob
 
 

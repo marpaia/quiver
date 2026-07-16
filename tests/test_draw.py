@@ -26,6 +26,8 @@ def test_mermaid_shows_grounded_component_names() -> None:
         Node("reg", "regulator", "reg0"),
     )
     grn = GRN(nodes=nodes, edges=(Edge("sup", "op"), Edge("op", "out")))
-    grounded = GRN(nodes=tuple(apply_component(n, repressor) if n.id == "op" else n for n in grn.nodes), edges=grn.edges)
+    grounded = GRN(
+        nodes=tuple(apply_component(n, repressor) if n.id == "op" else n for n in grn.nodes), edges=grn.edges
+    )
     mermaid = to_mermaid(grounded)
     assert f'[/"{repressor.name}"/]' in mermaid, "a grounded operator shows its Component name"
