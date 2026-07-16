@@ -232,11 +232,16 @@ class Designer(ModelHubMixin):  # type: ignore[misc]
         With ``library`` the amortized policy is Component-grounded: it designs every target as a real
         bill-of-Components with no retraining. Grounding is supported for the ``"mlp"`` arch (the stronger
         amortizer); pass no ``library`` for the graph arch."""
-        if library is not None and arch == "gnn":
-            raise ValueError("Component-grounded amortization is currently supported only with arch='mlp'")
         if arch == "gnn":
             policy = train_gnn_conditioned(
-                list(targets), steps=steps, batch=batch, beta=beta, max_steps=max_steps, seed=seed
+                list(targets),
+                steps=steps,
+                batch=batch,
+                beta=beta,
+                max_steps=max_steps,
+                seed=seed,
+                library=library,
+                inducer=inducer,
             )
         else:
             policy = train_conditioned(
@@ -266,7 +271,15 @@ class Designer(ModelHubMixin):  # type: ignore[misc]
         rng = random.Random(seed)
         steps = 0 if self.library is not None else tune_steps
         if self.arch == "gnn":
-            candidates = sample_gnn_conditioned(self.policy, target, budget, max_steps=self.max_steps, seed=seed)
+            candidates = sample_gnn_conditioned(
+                self.policy,
+                target,
+                budget,
+                max_steps=self.max_steps,
+                seed=seed,
+                library=self.library,
+                inducer=self.inducer,
+            )
         else:
             candidates = sample_conditioned(
                 self.policy,
@@ -299,6 +312,7 @@ class Designer(ModelHubMixin):  # type: ignore[misc]
                     "layers": len(self.policy.layers),
                     "n_reg": self.policy.n_reg,
                     "cond_dim": self.policy.cond_dim,
+                    "n_components": self.policy.n_components,
                 }
             )
         else:
@@ -337,6 +351,7 @@ class Designer(ModelHubMixin):  # type: ignore[misc]
                 layers=config["layers"],
                 n_reg=config["n_reg"],
                 cond_dim=config.get("cond_dim", 0),
+                n_components=config.get("n_components", 0),
             )
         else:
             policy = PolicyNet(
