@@ -5,13 +5,13 @@
     "repressors": 63,
     "activators": 32,
     "sensors": 21,
-    "seeds": 4,
+    "seeds": 8,
     "betas": [
       1.0,
       4.0
     ],
-    "budget": 48,
-    "train_evals": 120,
+    "budget": 100,
+    "train_evals": 360,
     "objective": "buildable_objective(ensemble=8, burden_capacity=500)",
     "pass_threshold": 0.3,
     "target": {
@@ -23,85 +23,101 @@
   "arms": {
     "mlp": {
       "beta=1.0": {
-        "distinct_mean": 32.75,
-        "distinct_std": 3.418698582794336,
-        "distinct_assignments_mean": 32.75,
-        "peak_mean": 0.7337754543053078,
-        "meanscore_mean": 0.39365296760795926,
-        "activator_frac_mean": 0.789042498719918,
-        "activators_per_design_mean": 1.251920122887865,
+        "distinct_mean": 69,
+        "distinct_std": 6.144102863722254,
+        "distinct_assignments_mean": 69,
+        "peak_mean": 0.7482347559642039,
+        "meanscore_mean": 0.3869093335008292,
+        "activator_frac_mean": 0.8250772157658653,
+        "activators_per_design_mean": 1.3201619263497761,
         "per_seed_distinct": [
-          36,
-          28,
-          31,
-          36
+          59,
+          61,
+          76,
+          73,
+          73,
+          73,
+          73,
+          64
         ]
       },
       "beta=4.0": {
-        "distinct_mean": 32.5,
-        "distinct_std": 2.692582403567252,
-        "distinct_assignments_mean": 32.5,
-        "peak_mean": 0.7352771521640205,
-        "meanscore_mean": 0.39904287910072106,
-        "activator_frac_mean": 0.8316482308921824,
-        "activators_per_design_mean": 1.3357354330136588,
+        "distinct_mean": 68.375,
+        "distinct_std": 7.6638355279846655,
+        "distinct_assignments_mean": 68.375,
+        "peak_mean": 0.7525961781669681,
+        "meanscore_mean": 0.3883023485258473,
+        "activator_frac_mean": 0.8306450385739925,
+        "activators_per_design_mean": 1.3866836023345401,
         "per_seed_distinct": [
-          31,
-          30,
-          32,
-          37
+          64,
+          53,
+          70,
+          67,
+          76,
+          76,
+          77,
+          64
         ]
       }
     },
     "gnn": {
       "beta=1.0": {
-        "distinct_mean": 34.25,
-        "distinct_std": 2.680951323690902,
-        "distinct_assignments_mean": 34.25,
-        "peak_mean": 0.7218766465375479,
-        "meanscore_mean": 0.39850276961408426,
-        "activator_frac_mean": 0.8685612082670906,
-        "activators_per_design_mean": 1.3646352234587529,
+        "distinct_mean": 66.125,
+        "distinct_std": 4.3714271125114275,
+        "distinct_assignments_mean": 66.125,
+        "peak_mean": 0.7658853312711477,
+        "meanscore_mean": 0.3808871551048723,
+        "activator_frac_mean": 0.8395611573223444,
+        "activators_per_design_mean": 1.474719697677658,
         "per_seed_distinct": [
-          30,
-          34,
-          36,
-          37
+          68,
+          63,
+          75,
+          67,
+          65,
+          68,
+          59,
+          64
         ]
       },
       "beta=4.0": {
-        "distinct_mean": 34.75,
-        "distinct_std": 3.031088913245535,
-        "distinct_assignments_mean": 34.75,
-        "peak_mean": 0.7035346541128877,
-        "meanscore_mean": 0.3992870252948202,
-        "activator_frac_mean": 0.8677547810612327,
-        "activators_per_design_mean": 1.5199889716018748,
+        "distinct_mean": 76.75,
+        "distinct_std": 2.0463381929681126,
+        "distinct_assignments_mean": 76.75,
+        "peak_mean": 0.768811648457566,
+        "meanscore_mean": 0.4143615188378146,
+        "activator_frac_mean": 0.8544566498898143,
+        "activators_per_design_mean": 1.4925136025739705,
         "per_seed_distinct": [
-          33,
-          39,
-          36,
-          31
+          75,
+          77,
+          77,
+          80,
+          76,
+          77,
+          73,
+          79
         ]
       }
     }
   },
   "paired_gnn_minus_mlp": {
     "beta=1.0": {
-      "mean_diff": 1.5,
-      "ci_low": -3.25,
-      "ci_high": 5.5,
-      "win_rate": 0.75,
-      "sign_p": 0.625,
-      "n": 4
+      "mean_diff": -2.875,
+      "ci_low": -7.25,
+      "ci_high": 1.75,
+      "win_rate": 0.375,
+      "sign_p": 0.453125,
+      "n": 8
     },
     "beta=4.0": {
-      "mean_diff": 2.25,
-      "ci_low": -3.5,
-      "ci_high": 7.25,
-      "win_rate": 0.75,
-      "sign_p": 0.625,
-      "n": 4
+      "mean_diff": 8.375,
+      "ci_low": 2.875,
+      "ci_high": 14.5,
+      "win_rate": 0.875,
+      "sign_p": 0.125,
+      "n": 8
     }
   }
 }
