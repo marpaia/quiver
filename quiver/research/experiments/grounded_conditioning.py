@@ -25,6 +25,7 @@ os.environ.setdefault("TQDM_DISABLE", "1")  # silence LOICA's per-simulation pro
 
 import json  # noqa: E402
 import time  # noqa: E402
+from dataclasses import replace  # noqa: E402
 from itertools import combinations  # noqa: E402
 from pathlib import Path  # noqa: E402
 from statistics import mean, pstdev  # noqa: E402
@@ -37,6 +38,17 @@ from quiver.component import library_from_name  # noqa: E402
 from quiver.grn import GRN  # noqa: E402
 from quiver.learn import amortized, gnn  # noqa: E402
 from quiver.objective import TargetResponse  # noqa: E402
+
+
+def wiring_hash(grn: GRN) -> str:
+    """A wiring-only signature: the topology hash with component identity stripped. Grounding writes the
+    Component name into ``node.name``, which ``topology_hash`` includes, so a raw topology hash conflates the
+    wiring with the chosen parts. Blanking the name (and component id) leaves the kind-and-edge structure --
+    the wiring the conditioning diagnostic should measure, since which specific part fills a stage is a
+    separate axis from which wiring the policy picks for a target."""
+    nodes = tuple(replace(n, name=n.kind, component_id=None) for n in grn.nodes)
+    return GRN(nodes=nodes, edges=grn.edges).topology_hash()
+
 
 SEEDS = env_int("SEEDS", 3)
 COND_STEPS = env_int("COND_STEPS", 60)
@@ -55,11 +67,15 @@ def _jaccard(a: set[str], b: set[str]) -> float:
     return len(a & b) / len(union) if union else 1.0
 
 
-def target_sensitivity(sampler: Callable[[TargetResponse, int], list[GRN]]) -> float:
-    """Mean pairwise Jaccard overlap of sampled topology sets across the target grid (no simulation)."""
-    sets = [{g.topology_hash() for g in sampler(TARGETS[i], 7000 + i)} for i in range(len(TARGETS))]
+def target_sensitivity(sampler: Callable[[TargetResponse, int], list[GRN]]) -> tuple[float, float]:
+    """Mean pairwise Jaccard overlap of sampled *wiring* sets across the target grid (no simulation), and the
+    mean number of distinct wirings per target. Overlap on the wiring signature (not the component-laden
+    topology hash) is what reflects target-conditioning; the distinct-wiring count guards against a floor
+    artifact (if every target explores nearly all wirings, overlap is high, not low)."""
+    sets = [{wiring_hash(g) for g in sampler(TARGETS[i], 7000 + i)} for i in range(len(TARGETS))]
     overlaps = [_jaccard(a, b) for a, b in combinations(sets, 2)]
-    return mean(overlaps) if overlaps else 1.0
+    mean_distinct = mean(len(s) for s in sets)
+    return (mean(overlaps) if overlaps else 1.0), mean_distinct
 
 
 def main() -> None:
@@ -73,6 +89,7 @@ def main() -> None:
     )
     policies = ("mlp", "node-gnn", "head-gnn")
     sens: dict[str, list[float]] = {p: [] for p in policies}
+    wirings: dict[str, list[float]] = {p: [] for p in policies}
 
     t0 = time.perf_counter()
     for seed in range(SEEDS):
@@ -140,17 +157,19 @@ def main() -> None:
                 inducer=INDUCER,
             )
 
-        sens["mlp"].append(target_sensitivity(mlp_sampler))
-        sens["node-gnn"].append(target_sensitivity(node_sampler))
-        sens["head-gnn"].append(target_sensitivity(head_sampler))
+        for name, sampler in (("mlp", mlp_sampler), ("node-gnn", node_sampler), ("head-gnn", head_sampler)):
+            overlap, mean_distinct = target_sensitivity(sampler)
+            sens[name].append(overlap)
+            wirings[name].append(mean_distinct)
         print(f"  seed {seed} done ({time.perf_counter() - t0:.0f}s)")
 
-    print("\ncross-target topology overlap (lower = more target-sensitive), per policy:")
+    print("\ncross-target wiring overlap (lower = more target-sensitive) | distinct wirings/target, per policy:")
     result: dict[str, dict[str, float]] = {}
     for p in policies:
         m, sd = mean(sens[p]), pstdev(sens[p])
-        result[p] = {"overlap_mean": m, "overlap_std": sd, "per_seed": sens[p]}
-        print(f"  {p:9s} {m:.3f} ± {sd:.3f}")
+        wd = mean(wirings[p])
+        result[p] = {"overlap_mean": m, "overlap_std": sd, "distinct_wirings_mean": wd, "per_seed": sens[p]}
+        print(f"  {p:9s} overlap {m:.3f} ± {sd:.3f} | distinct wirings/target {wd:.1f}")
 
     RESULTS.parent.mkdir(exist_ok=True)
     RESULTS.write_text(
