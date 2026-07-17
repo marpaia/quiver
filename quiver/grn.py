@@ -9,6 +9,7 @@ model mirrors LOICA's ``GeneticNetwork`` so a design round-trips to a genetic-ci
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass, field, replace
 from typing import Literal, cast
@@ -21,6 +22,9 @@ ParamValue = float | int | list[float] | list[list[float]] | str
 
 SPECIES_KINDS: frozenset[str] = frozenset({"regulator", "reporter", "supplement"})
 OPERATOR_KINDS: frozenset[str] = frozenset({"source", "receiver", "hill1", "hill2", "sum"})
+
+# Weisfeiler-Lehman refinement rounds for the canonical structural hash; a few saturate on small circuits.
+_WL_ROUNDS = 3
 
 
 @dataclass(frozen=True)
@@ -178,29 +182,40 @@ class GRN:
         return replace(self, edges=self.edges + (edge,))
 
     def structural_hash(self) -> str:
-        """A canonical key identifying the topology *and* parameters, invariant to node id and ordering.
+        """A canonical key identifying the topology *and* parameters, invariant to node id, name, and ordering.
 
         Two networks that differ only by how their nodes are named or listed share one key, so a search
-        dedupes exactly-equivalent proposals (same wiring, same parameter values).
+        dedupes exactly-equivalent proposals (same wiring, same parameter values). Because a grounded design's
+        kinetics come from its Components, two designs with the same wiring but different Components differ in
+        their parameters and so differ here --- this is the *assignment* axis of diversity.
         """
         return self._canonical(include_params=True)
 
     def topology_hash(self) -> str:
-        """A canonical key for the wiring alone, ignoring parameters, two circuits with the same parts
-        and edges but different Hill values share it.
+        """A canonical key for the wiring alone: node *kinds* and edges, ignoring parameters, names, and
+        Component identity, so two circuits with the same wiring share it whatever their Hill values or the
+        parts filling their stages.
 
-        This is the mode identity for portfolio diversity: distinct topologies are distinct *buildable*
-        designs, while parameters are tuning within a topology. Canonical up to node naming (as
-        :meth:`structural_hash`).
+        This is the *wiring* axis of portfolio diversity: distinct topologies are distinct structural designs,
+        while both parameter tuning and Component choice are variation within a topology. (Which specific
+        Component fills a stage is the assignment axis, visible in :meth:`structural_hash`, not here.)
         """
         return self._canonical(include_params=False)
 
     def _canonical(self, *, include_params: bool) -> str:
-        order = sorted(range(len(self.nodes)), key=lambda i: _node_key(self.nodes[i], include_params))
-        index = {self.nodes[i].id: rank for rank, i in enumerate(order)}
-        canon_nodes = [_node_key(self.nodes[i], include_params) for i in order]
+        """A canonical structural signature, invariant to node id, name, ordering, and Component identity.
+
+        Node labels are refined by Weisfeiler-Lehman-style message passing over the wiring (each round folds
+        in the sorted labels of a node's ported predecessors and successors), so the signature reflects graph
+        structure rather than the node names the generators happen to assign --- names carry no structural
+        meaning and, once a stage is grounded, encode the chosen part, which is not part of the wiring.
+        """
+        labels = _refined_labels(self.nodes, self.edges, include_params)
+        canon_nodes = sorted(labels[node.id] for node in self.nodes)
         canon_edges = sorted(
-            [index[e.source], index[e.target], e.port] for e in self.edges if e.source in index and e.target in index
+            [labels[e.source], labels[e.target], e.port]
+            for e in self.edges
+            if e.source in labels and e.target in labels
         )
         return json.dumps({"nodes": canon_nodes, "edges": canon_edges}, sort_keys=True, separators=(",", ":"))
 
@@ -244,10 +259,34 @@ class GRN:
         return GRN(nodes=nodes, edges=edges)
 
 
-def _node_key(node: Node, include_params: bool) -> list[object]:
-    """A content signature for a node, used to canonicalize a hash. Parameters are included only for the
-    exact (structural) hash, not the topology hash."""
-    base: list[object] = [node.kind, node.name]
+def _base_label(node: Node, include_params: bool) -> str:
+    """A node's initial structural label: its kind, plus its parameters for the exact hash. Neither the node
+    name nor its Component id is included --- both are display/provenance, not wiring structure."""
+    base: list[object] = [node.kind]
     if include_params:
         base.append(sorted((key, _clone(value)) for key, value in node.params.items()))
-    return base
+    return json.dumps(base, sort_keys=True, separators=(",", ":"))
+
+
+def _refined_labels(nodes: tuple[Node, ...], edges: tuple[Edge, ...], include_params: bool) -> dict[str, str]:
+    """Weisfeiler-Lehman node labels: refine each node's label by folding in the sorted labels of its ported
+    predecessors and successors, so structurally-equivalent nodes share a label and the result is invariant
+    to node naming and ordering. A few rounds saturate on these small circuit graphs.
+    """
+    labels = {node.id: _base_label(node, include_params) for node in nodes}
+    ids = set(labels)
+    out_adj: dict[str, list[tuple[int, str]]] = {node.id: [] for node in nodes}
+    in_adj: dict[str, list[tuple[int, str]]] = {node.id: [] for node in nodes}
+    for edge in edges:
+        if edge.source in ids and edge.target in ids:
+            out_adj[edge.source].append((edge.port, edge.target))
+            in_adj[edge.target].append((edge.port, edge.source))
+    for _ in range(_WL_ROUNDS):
+        refined: dict[str, str] = {}
+        for node_id, label in labels.items():
+            successors = sorted((port, labels[t]) for port, t in out_adj[node_id])
+            predecessors = sorted((port, labels[s]) for port, s in in_adj[node_id])
+            signature = json.dumps([label, predecessors, successors], sort_keys=True, separators=(",", ":"))
+            refined[node_id] = hashlib.sha1(signature.encode()).hexdigest()[:16]
+        labels = refined
+    return labels

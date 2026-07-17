@@ -25,7 +25,6 @@ os.environ.setdefault("TQDM_DISABLE", "1")  # silence LOICA's per-simulation pro
 
 import json  # noqa: E402
 import time  # noqa: E402
-from dataclasses import replace  # noqa: E402
 from itertools import combinations  # noqa: E402
 from pathlib import Path  # noqa: E402
 from statistics import mean, pstdev  # noqa: E402
@@ -41,13 +40,10 @@ from quiver.objective import TargetResponse  # noqa: E402
 
 
 def wiring_hash(grn: GRN) -> str:
-    """A wiring-only signature: the topology hash with component identity stripped. Grounding writes the
-    Component name into ``node.name``, which ``topology_hash`` includes, so a raw topology hash conflates the
-    wiring with the chosen parts. Blanking the name (and component id) leaves the kind-and-edge structure --
-    the wiring the conditioning diagnostic should measure, since which specific part fills a stage is a
-    separate axis from which wiring the policy picks for a target."""
-    nodes = tuple(replace(n, name=n.kind, component_id=None) for n in grn.nodes)
-    return GRN(nodes=nodes, edges=grn.edges).topology_hash()
+    """The wiring signature: ``topology_hash`` is a genuine wiring invariant (kinds + edges, name/param/
+    Component-free), so it is exactly the axis the conditioning diagnostic should measure --- which wiring the
+    policy picks for a target, independent of which parts fill it."""
+    return grn.topology_hash()
 
 
 SEEDS = env_int("SEEDS", 3)
