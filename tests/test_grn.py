@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import random
 from dataclasses import replace
 
 import pytest
 
+from quiver.component import apply_component, load_cello
 from quiver.generate import example_inducible
-from quiver.grn import GRN, Edge, default_params, is_operator
+from quiver.generate.topology import sensor_cascade
+from quiver.grn import GRN, Edge, Node, default_params, is_operator
 
 
 def test_example_round_trips_through_dict() -> None:
@@ -48,6 +51,42 @@ def test_topology_hash_ignores_parameters() -> None:
     # Same wiring, different Hill value: one topology, two exact structures.
     assert variant.topology_hash() == grn.topology_hash()
     assert variant.structural_hash() != grn.structural_hash()
+
+
+def test_topology_hash_is_name_invariant() -> None:
+    # Node names carry no structural meaning: renaming every node leaves the wiring hash unchanged.
+    grn = example_inducible()
+    renamed = GRN(nodes=tuple(replace(n, name=f"z{i}") for i, n in enumerate(grn.nodes)), edges=grn.edges)
+    assert renamed.topology_hash() == grn.topology_hash()
+    assert renamed.structural_hash() == grn.structural_hash()
+
+
+def test_topology_hash_distinguishes_different_wirings() -> None:
+    # A longer cascade is a different wiring, so it must not collide with the shorter one.
+    depth2 = sensor_cascade(2, random.Random(0))
+    depth3 = sensor_cascade(3, random.Random(0))
+    assert depth2.topology_hash() != depth3.topology_hash()
+
+
+def test_grounding_shares_wiring_but_splits_assignment() -> None:
+    # Two designs with identical wiring grounded in different components: one wiring, two assignments.
+    reps = load_cello().repressors()
+    base = GRN(
+        nodes=(
+            Node("sup", "supplement", "aTc"),
+            Node("op", "hill1", "op", {"alpha": [100.0, 0.0], "K": 1.0, "n": 2.0}),
+            Node("reg", "regulator", "reg"),
+            Node("out", "reporter", "GFP", {"signal_id": "gfp"}),
+        ),
+        edges=(Edge("sup", "op"), Edge("op", "reg"), Edge("reg", "out")),
+    )
+
+    def grounded(rep: object) -> GRN:
+        return GRN(nodes=tuple(apply_component(n, rep) if n.id == "op" else n for n in base.nodes), edges=base.edges)
+
+    a, b = grounded(reps[0]), grounded(reps[1])
+    assert a.topology_hash() == b.topology_hash(), "same wiring, different parts: one topology"
+    assert a.structural_hash() != b.structural_hash(), "different parts: distinct assignment"
 
 
 def test_wiring_resolution() -> None:

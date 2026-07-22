@@ -23,9 +23,9 @@ import torch
 
 from quiver.component import (
     ComponentLibrary,
+    gate_availability,
     ground_operator,
     ground_sensor,
-    repressor_availability,
     ungrounded_operator_ids,
 )
 from quiver.gfn.env import initial_sensor
@@ -260,14 +260,14 @@ def _ground_pending(
     feature_target: TargetResponse | None,
     cond: torch.Tensor | None,
 ) -> tuple[GRN, torch.Tensor]:
-    """Ground every not-yet-grounded ``hill1`` stage in ``grn`` by sampling a repressor Component from the
-    policy's Component head, masked so a transcription factor is never reused (orthogonality). Returns the
-    grounded circuit and the summed log-probability of the Component choices, so the trajectory balance sees
+    """Ground every not-yet-grounded ``hill1`` stage in ``grn`` by sampling a gate Component (repressor or
+    activator) from the policy's Component head, masked so a transcription factor is never reused
+    (orthogonality). Returns the grounded circuit and the summed log-probability of the choices, so balance sees
     the assignment as part of the forward policy."""
-    reps = library.repressors()
+    reps = library.gates()
     log_prob = torch.zeros(())
     for node_id in ungrounded_operator_ids(grn, "hill1"):
-        available = repressor_availability(grn, library)
+        available = gate_availability(grn, library)
         if not any(available):
             break
         features, forward, backward, _ = graph_tensors(grn, 0, 1, feature_target)
@@ -345,11 +345,11 @@ def train(
     policy concentrating on a few (regulator-cap) topologies at high ``beta``.
 
     When ``library`` is given the sampler is *Component-grounded*: every stage is built from a real SBOL
-    Component (the sensor from ``inducer``, each ``hill1`` from a policy-chosen repressor, orthogonally), and
-    the reward is scored on the grounded circuit."""
+    Component (the sensor from ``inducer``, each ``hill1`` from a policy-chosen gate --- repressor or
+    activator --- orthogonally), and the reward is scored on the grounded circuit."""
     torch.manual_seed(seed)
     rng = random.Random(seed)
-    n_components = len(library.repressors()) if library is not None else 0
+    n_components = len(library.gates()) if library is not None else 0
     policy = GraphPolicyNet(n_components=n_components)
     optimizer = torch.optim.Adam(policy.parameters(), lr=lr)
     for _ in range(steps):
@@ -393,13 +393,13 @@ def sample_terminals(
     return out
 
 
-def conditioned_policy(cond_mode: str = "node") -> GraphPolicyNet:
+def conditioned_policy(cond_mode: str = "node", n_components: int = 0) -> GraphPolicyNet:
     """A graph policy sized for target conditioning. ``"node"`` appends the target encoding to node input
     features; ``"head"`` feeds it to the action heads instead (physical features only enter message passing).
-    """
+    ``n_components > 0`` adds a Component head for a grounded conditioned policy."""
     if cond_mode == "head":
-        return GraphPolicyNet(in_features=_N_FEATURES, cond_dim=_TARGET_FEATURES)
-    return GraphPolicyNet(in_features=_N_FEATURES + _TARGET_FEATURES)
+        return GraphPolicyNet(in_features=_N_FEATURES, cond_dim=_TARGET_FEATURES, n_components=n_components)
+    return GraphPolicyNet(in_features=_N_FEATURES + _TARGET_FEATURES, n_components=n_components)
 
 
 def train_conditioned(
@@ -414,14 +414,18 @@ def train_conditioned(
     seed: int = 0,
     entropy_coef: float = 0.0,
     cond_mode: str = "node",
+    library: ComponentLibrary | None = None,
+    inducer: str = "aTc",
 ) -> GraphPolicyNet:
     """Train one target-conditioned graph policy across ``targets`` (one target per batch, cycling), the
     graph-policy analogue of :func:`quiver.learn.amortized.train_conditioned`. ``cond_mode`` selects how the
     target enters (``"node"`` into node features, ``"head"`` into the action heads); a single policy serves
-    the whole distribution. Uses ``steps * batch`` simulations."""
+    the whole distribution. Uses ``steps * batch`` simulations. With ``library`` the amortized graph policy is
+    Component-grounded, so a trained designer builds every target as a real bill-of-Components."""
     torch.manual_seed(seed)
     rng = random.Random(seed)
-    policy = conditioned_policy(cond_mode)
+    n_components = len(library.gates()) if library is not None else 0
+    policy = conditioned_policy(cond_mode, n_components)
     optimizer = torch.optim.Adam(policy.parameters(), lr=lr)
     for step in range(steps):
         target = targets[step % len(targets)]
@@ -430,7 +434,10 @@ def train_conditioned(
         log_rewards = []
         entropies = []
         for _ in range(batch):
-            grn, log_prob, entropy = _rollout(policy, rng, max_steps, target, cond_mode)
+            if library is not None:
+                grn, log_prob, entropy = _grounded_rollout(policy, rng, max_steps, library, inducer, target, cond_mode)
+            else:
+                grn, log_prob, entropy = _rollout(policy, rng, max_steps, target, cond_mode)
             reward = score_once(grn, behavior)
             log_probs.append(log_prob)
             log_rewards.append(beta * torch.log(torch.tensor(max(reward, 0.0) + floor)))
@@ -447,14 +454,19 @@ def sample_conditioned(
     max_steps: int = 8,
     seed: int = 0,
     cond_mode: str = "node",
+    library: ComponentLibrary | None = None,
+    inducer: str = "aTc",
 ) -> list[GRN]:
     """Sample ``n`` terminal circuits from a trained graph policy, conditioned on ``target`` (no gradient).
-    ``cond_mode`` must match the mode the policy was trained with."""
+    ``cond_mode`` must match the mode the policy was trained with; ``library`` must match too if grounded."""
     torch.manual_seed(seed)
     rng = random.Random(seed)
     out: list[GRN] = []
     with torch.no_grad():
         for _ in range(n):
-            grn, _, _ = _rollout(policy, rng, max_steps, target, cond_mode)
+            if library is not None:
+                grn, _, _ = _grounded_rollout(policy, rng, max_steps, library, inducer, target, cond_mode)
+            else:
+                grn, _, _ = _rollout(policy, rng, max_steps, target, cond_mode)
             out.append(grn)
     return out

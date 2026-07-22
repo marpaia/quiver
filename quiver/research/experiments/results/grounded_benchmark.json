@@ -1,0 +1,123 @@
+{
+  "config": {
+    "library": "cello+ecf",
+    "components": 116,
+    "repressors": 63,
+    "activators": 32,
+    "sensors": 21,
+    "seeds": 8,
+    "betas": [
+      1.0,
+      4.0
+    ],
+    "budget": 100,
+    "train_evals": 360,
+    "objective": "buildable_objective(ensemble=8, burden_capacity=500)",
+    "pass_threshold": 0.3,
+    "target": {
+      "ec50": 1.0,
+      "dynamic_range": 100.0,
+      "direction": "any"
+    }
+  },
+  "arms": {
+    "mlp": {
+      "beta=1.0": {
+        "distinct_mean": 10.625,
+        "distinct_std": 1.5761900266148114,
+        "distinct_assignments_mean": 69,
+        "peak_mean": 0.7482347559642039,
+        "meanscore_mean": 0.3869093335008292,
+        "activator_frac_mean": 0.8250772157658653,
+        "activators_per_design_mean": 1.3201619263497761,
+        "per_seed_distinct": [
+          9,
+          10,
+          11,
+          8,
+          10,
+          12,
+          13,
+          12
+        ]
+      },
+      "beta=4.0": {
+        "distinct_mean": 11.5,
+        "distinct_std": 1.6583123951777,
+        "distinct_assignments_mean": 68.375,
+        "peak_mean": 0.7525961781669681,
+        "meanscore_mean": 0.3883023485258473,
+        "activator_frac_mean": 0.8306450385739925,
+        "activators_per_design_mean": 1.3866836023345401,
+        "per_seed_distinct": [
+          11,
+          11,
+          11,
+          8,
+          13,
+          12,
+          14,
+          12
+        ]
+      }
+    },
+    "gnn": {
+      "beta=1.0": {
+        "distinct_mean": 14.25,
+        "distinct_std": 1.5612494995995996,
+        "distinct_assignments_mean": 66.125,
+        "peak_mean": 0.7658853312711477,
+        "meanscore_mean": 0.3808871551048723,
+        "activator_frac_mean": 0.8395611573223444,
+        "activators_per_design_mean": 1.474719697677658,
+        "per_seed_distinct": [
+          15,
+          14,
+          16,
+          14,
+          13,
+          15,
+          16,
+          11
+        ]
+      },
+      "beta=4.0": {
+        "distinct_mean": 13.875,
+        "distinct_std": 1.6153559979150107,
+        "distinct_assignments_mean": 76.75,
+        "peak_mean": 0.768811648457566,
+        "meanscore_mean": 0.4143615188378146,
+        "activator_frac_mean": 0.8544566498898143,
+        "activators_per_design_mean": 1.4925136025739705,
+        "per_seed_distinct": [
+          15,
+          17,
+          13,
+          15,
+          13,
+          12,
+          14,
+          12
+        ]
+      }
+    }
+  },
+  "paired_gnn_minus_mlp": {
+    "beta=1.0": {
+      "mean_diff": 3.625,
+      "ci_low": 2.125,
+      "ci_high": 5,
+      "win_rate": 0.875,
+      "sign_p": 0.0703125,
+      "n": 8
+    },
+    "beta=4.0": {
+      "mean_diff": 2.375,
+      "ci_low": 0.75,
+      "ci_high": 4.375,
+      "win_rate": 1.0,
+      "sign_p": 0.125,
+      "n": 8
+    }
+  }
+}

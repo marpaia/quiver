@@ -1,0 +1,42 @@
+{
+  "config": {
+    "library": "cello+ecf",
+    "components": 116,
+    "seeds": 3,
+    "beta": 4.0,
+    "cond_train_evals": 600,
+    "sensitivity_samples": 40
+  },
+  "overlap": {
+    "mlp": {
+      "overlap_mean": 0.0003196522183863956,
+      "overlap_std": 9.041130049693742e-05,
+      "distinct_wirings_mean": 40,
+      "per_seed": [
+        0.00019179133103183735,
+        0.0003835826620636747,
+        0.0003835826620636747
+      ]
+    },
+    "node-gnn": {
+      "overlap_mean": 0.6330868907032718,
+      "overlap_std": 0.03379322657110419,
+      "distinct_wirings_mean": 20.22222222222222,
+      "per_seed": [
+        0.6634829920238352,
+        0.5859509156972925,
+        0.6498267643886879
+      ]
+    },
+    "head-gnn": {
+      "overlap_mean": 0.627764948214004,
+      "overlap_std": 0.03481564992119396,
+      "distinct_wirings_mean": 19.97222222222222,
+      "per_seed": [
+        0.6624238003981087,
+        0.6407219414070534,
+        0.5801491028368498
+      ]
+    }
+  }
+}

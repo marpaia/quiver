@@ -1,0 +1,35 @@
+{
+  "config": {
+    "library": "cello+ecf",
+    "components": 116,
+    "seeds": 6,
+    "beta": 4.0,
+    "budget": 60,
+    "cond_train_evals": 600,
+    "pass_threshold": 0.3,
+    "trained_targets": 8,
+    "held_out_targets": 4
+  },
+  "arms": {
+    "mlp": {
+      "trained_distinct_mean": 9.0,
+      "held_distinct_mean": 5.708333333333333,
+      "held_distinct_std": 0.9176131477310517,
+      "activator_frac_mean": 0.7035631613756614
+    },
+    "gnn": {
+      "trained_distinct_mean": 12.6875,
+      "held_distinct_mean": 7.958333333333333,
+      "held_distinct_std": 0.782845592835664,
+      "activator_frac_mean": 0.6998059608538811
+    }
+  },
+  "paired_gnn_minus_mlp_held": {
+    "mean_diff": 2.25,
+    "ci_low": 1.5,
+    "ci_high": 2.9166666666666665,
+    "win_rate": 1.0,
+    "sign_p": 0.03125,
+    "n": 6
+  }
+}

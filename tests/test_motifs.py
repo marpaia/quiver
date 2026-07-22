@@ -33,7 +33,15 @@ def test_repressilator_is_valid_and_autonomous() -> None:
     assert sum(1 for n in grn.nodes if n.kind == "regulator") == 3  # the repression ring
 
 
-def test_motif_readout_choice_yields_distinct_topologies() -> None:
-    toggles = {mutual_repression_toggle(random.Random(s)).topology_hash() for s in range(12)}
-    rings = {repressilator(random.Random(s)).topology_hash() for s in range(12)}
-    assert len(toggles) >= 2 and len(rings) >= 2
+def test_motif_readout_choice_reflects_structural_symmetry() -> None:
+    # The toggle's two arms are asymmetric (only one is inducer-driven), so which arm the reporter reads is a
+    # genuinely distinct wiring. The repressilator ring is symmetric, so reading any arm is the same wiring --
+    # the readout choice shows up only as a distinct exact structure (via the started-high init), not a
+    # distinct topology. This is the wiring/assignment distinction the name-free hash draws correctly.
+    toggle_wirings = {mutual_repression_toggle(random.Random(s)).topology_hash() for s in range(12)}
+    assert len(toggle_wirings) >= 2, "asymmetric toggle arms are distinct wirings"
+
+    ring_wirings = {repressilator(random.Random(s)).topology_hash() for s in range(12)}
+    ring_structures = {repressilator(random.Random(s)).structural_hash() for s in range(12)}
+    assert len(ring_wirings) == 1, "a symmetric ring has one wiring whichever arm is read"
+    assert len(ring_structures) >= 2, "readout/params still vary the exact structure"
