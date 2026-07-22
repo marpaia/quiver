@@ -17,6 +17,13 @@ two-input ``hill2`` operator contributes a per-input sign read from its four-ent
 input on), and (both on) --- the ordering LOICA integrates, ``a0 + a1*r1 + a2*r2 + a3*r1*r2`` with ``r1``
 the port-0 input. Each input's sign is ``+1``/``-1`` when the output is monotone in that input, ``0`` when
 it is non-monotone (e.g. an XOR-like logic), and no edge when the input has no effect.
+
+The same rule is read in exact rationals by `grn-lean`, which consumes the designs :meth:`GRN.to_dict`
+emits and machine-checks the certificates in Lean's kernel. Two implementations of one rule drift, so
+``tests/data/certificate_conformance.json`` pins the verdict both must produce over a corpus of designs
+and both are tested against it. Signs are decided by *comparing* stored values rather than subtracting
+them, so the decision is a pure order predicate that a float reading and an exact-rational reading agree
+on wherever the serialized decimals order the same way.
 """
 
 from __future__ import annotations
@@ -30,6 +37,15 @@ from quiver.grn import GRN, Node
 SignedEdge = tuple[str, str, int]
 
 
+def _alpha_nums(node: Node) -> list[float]:
+    """The numeric entries of a node's ``alpha`` vector, dropping non-numeric ones. A scalar or nested
+    value (the ``sum`` operator's per-input pairs) yields ``[]``."""
+    alpha = node.params.get("alpha")
+    if not isinstance(alpha, list):
+        return []
+    return [float(x) for x in alpha if isinstance(x, (int, float)) and not isinstance(x, bool)]
+
+
 def _pair_sign(basal: float, maximum: float) -> int | None:
     """Sign of a single-input Hill/receiver operator from its ``[basal, max]`` expression bounds."""
     if maximum > basal:
@@ -39,15 +55,17 @@ def _pair_sign(basal: float, maximum: float) -> int | None:
     return None
 
 
-def _sign_from_deltas(deltas: list[float]) -> int | None:
-    """Monotone sign of an input from its output changes across the other input's states.
+def _sign_from_pairs(pairs: list[tuple[float, float]]) -> int | None:
+    """Monotone sign of an input from ``(low, high)`` pairs of the operator's output as that input
+    toggles with the other held fixed.
 
-    Returns ``+1`` if every change is non-negative (and some positive), ``-1`` if every change is
-    non-positive (and some negative), ``None`` if the input has no effect, and ``0`` if the effect changes
-    sign (non-monotone).
+    Returns ``+1`` if every pair increases, ``-1`` if every pair decreases, ``0`` if the effect changes
+    sign (non-monotone), and ``None`` if the input has no effect. The entries are *compared* rather than
+    subtracted so the decision is a pure order predicate on the stored values, matching the exact-rational
+    reading in ``grn-lean``'s ``signFromPairs`` with no intervening arithmetic.
     """
-    positive = any(d > 0.0 for d in deltas)
-    negative = any(d < 0.0 for d in deltas)
+    positive = any(low < high for low, high in pairs)
+    negative = any(high < low for low, high in pairs)
     if positive and negative:
         return 0
     if positive:
@@ -58,25 +76,36 @@ def _sign_from_deltas(deltas: list[float]) -> int | None:
 
 
 def _operator_input_signs(node: Node) -> list[int | None]:
-    """Per-input-port sign of an operator's effect on the species it produces."""
-    alpha = node.params.get("alpha")
+    """Per-input-port sign of an operator's effect on the species it produces, read from its kinetics
+    alone. ``sum`` is arity-driven rather than kinetics-driven, so its ports are counted by
+    :func:`_op_edge_signs` from the wiring instead."""
+    alpha = _alpha_nums(node)
     if node.kind in ("receiver", "hill1"):
-        if isinstance(alpha, list) and len(alpha) >= 2:
-            pair = [float(x) for x in alpha[:2] if isinstance(x, (int, float))]
-            if len(pair) == 2:
-                return [_pair_sign(pair[0], pair[1])]
+        if len(alpha) >= 2:
+            return [_pair_sign(alpha[0], alpha[1])]
         return [None]
     if node.kind == "hill2":
-        if isinstance(alpha, list) and len(alpha) >= 4:
-            a = [float(x) for x in alpha[:4] if isinstance(x, (int, float))]
-            if len(a) == 4:
-                in0 = _sign_from_deltas([a[1] - a[0], a[3] - a[2]])
-                in1 = _sign_from_deltas([a[2] - a[0], a[3] - a[1]])
-                return [in0, in1]
+        if len(alpha) >= 4:
+            # `[a0,a1,a2,a3]` is LOICA's `a0 + a1*r1 + a2*r2 + a3*r1*r2`, `r1` the port-0 input.
+            # Each pair compares the output as one input toggles with the other held fixed.
+            a0, a1, a2, a3 = alpha[0], alpha[1], alpha[2], alpha[3]
+            return [_sign_from_pairs([(a0, a1), (a2, a3)]), _sign_from_pairs([(a0, a2), (a1, a3)])]
         return [None, None]
     if node.kind == "sum":
         return [1] * max(1, node.n_inputs)
     return []
+
+
+def _op_edge_signs(grn: GRN, op: Node) -> list[int | None]:
+    """The per-port signs an operator's edges are built from.
+
+    A ``sum`` operator adds its inputs, so every species actually wired to it carries a ``+1``, however
+    many ports were declared: a design whose ``inputCount`` disagrees with its wiring must not silently
+    drop the surplus edges. Every other kind reads its signs from kinetics.
+    """
+    if op.kind == "sum":
+        return [1] * len(grn.inputs_of(op.id))
+    return _operator_input_signs(op)
 
 
 def signed_interaction_graph(grn: GRN) -> list[SignedEdge]:
@@ -87,7 +116,7 @@ def signed_interaction_graph(grn: GRN) -> list[SignedEdge]:
     """
     edges: list[SignedEdge] = []
     for op in grn.operators():
-        signs = _operator_input_signs(op)
+        signs = _op_edge_signs(grn, op)
         inputs = grn.inputs_of(op.id)
         outputs = grn.outputs_of(op.id)
         for port, src in enumerate(inputs):
