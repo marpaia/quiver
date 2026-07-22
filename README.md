@@ -129,6 +129,3 @@ git clone git@github.com:marpaia/quiver.git
 cd quiver
 pip install -e .
 ```
-
-The `flapjack-data` dependency resolves to a local sibling checkout, so keep it alongside `quiver` (at
-`../flapjack-data`) when installing.

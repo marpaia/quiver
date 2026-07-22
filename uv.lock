@@ -424,30 +424,7 @@ wheels = [
 [[package]]
 name = "flapjack-data"
 version = "0.1.0"
-source = { directory = "../flapjack-data" }
-
-[package.metadata]
-requires-dist = [
-    { name = "alembic", marker = "extra == 'dev'", specifier = ">=1.13" },
-    { name = "alembic", marker = "extra == 'postgres'", specifier = ">=1.13" },
-    { name = "black", marker = "extra == 'dev'", specifier = ">=24.0" },
-    { name = "flake8", marker = "extra == 'dev'", specifier = ">=7.0" },
-    { name = "isort", marker = "extra == 'dev'", specifier = ">=5.13" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
-    { name = "numpy", marker = "extra == 'analysis'", specifier = ">=1.24" },
-    { name = "numpy", marker = "extra == 'dev'", specifier = ">=1.24" },
-    { name = "pandas", marker = "extra == 'analysis'", specifier = ">=2.0" },
-    { name = "pandas", marker = "extra == 'dev'", specifier = ">=2.0" },
-    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.5" },
-    { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'", specifier = ">=3.1" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
-    { name = "scipy", marker = "extra == 'analysis'", specifier = ">=1.10" },
-    { name = "scipy", marker = "extra == 'dev'", specifier = ">=1.10" },
-    { name = "sqlalchemy", marker = "extra == 'dev'", specifier = ">=2.0" },
-    { name = "sqlalchemy", marker = "extra == 'postgres'", specifier = ">=2.0" },
-    { name = "sqlalchemy", marker = "extra == 'sqlite'", specifier = ">=2.0" },
-]
-provides-extras = ["postgres", "sqlite", "analysis", "dev"]
+source = { git = "https://github.com/marpaia/flapjack-data.git?rev=master#3ac2c71cba44eb932f04156ba8389007a331628d" }
 
 [[package]]
 name = "fonttools"
@@ -1841,7 +1818,7 @@ dependencies = [
 requires-dist = [
     { name = "black", specifier = ">=24" },
     { name = "flake8", specifier = ">=7" },
-    { name = "flapjack-data", directory = "../flapjack-data" },
+    { name = "flapjack-data", git = "https://github.com/marpaia/flapjack-data.git?rev=master" },
     { name = "huggingface-hub", specifier = ">=0.23" },
     { name = "isort", specifier = ">=5.13" },
     { name = "loica", git = "https://github.com/RudgeLab/LOICA.git?rev=c2b65b30938f5f67a4fa215689efbb418510c422" },

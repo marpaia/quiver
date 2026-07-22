@@ -16,7 +16,7 @@ dependencies = [
     "loica @ git+https://github.com/RudgeLab/LOICA.git@c2b65b30938f5f67a4fa215689efbb418510c422",
     "matplotlib>=3.8",
     "pandas>=2.0",
-    "flapjack-data @ file:///Users/marpaia/git/marpaia/flapjack-data",
+    "flapjack-data @ git+https://github.com/marpaia/flapjack-data.git@master",
     "pytest>=8",
     "black>=24",
     "isort>=5.13",
