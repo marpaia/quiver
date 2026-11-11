@@ -19,12 +19,7 @@ import pathlib
 import pytest
 
 from quiver.grn import GRN
-from quiver.research.objective.certificate import (
-    certifies,
-    is_monotone,
-    loop_signs,
-    signed_interaction_graph,
-)
+from quiver.research.objective.certificate import certifies, is_monotone, loop_signs, signed_interaction_graph
 
 CORPUS = json.loads((pathlib.Path(__file__).parent / "data" / "certificate_conformance.json").read_text())
 CASES = CORPUS["cases"]

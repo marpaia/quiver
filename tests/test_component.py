@@ -9,11 +9,9 @@ from quiver.component import (
     apply_component,
     component_to_params,
     gate_availability,
-    library_from_name,
     load_cello,
     load_ecf,
     load_flat_csv,
-    merge,
 )
 from quiver.generate.realizable import is_realizable
 from quiver.grn import GRN, Node, is_operator
@@ -96,13 +94,6 @@ def test_orthogonality_key_is_the_regulator() -> None:
     assert len(set(regulators)) < len(regulators), "the corpus has multiple gate variants per regulator"
 
 
-def test_library_reloads_by_name() -> None:
-    assert load_cello().name == "cello"
-    reloaded = library_from_name("cello")
-    assert reloaded is not None and len(reloaded) == len(load_cello())
-    assert library_from_name("") is None and library_from_name("unknown") is None
-
-
 def test_mlp_grounded_rollout_builds_orthogonal_component_circuit() -> None:
     # The MLP grounded rollout is torch-only (no simulation): the feature-summary policy grounds every stage.
     library = load_cello()
@@ -147,17 +138,6 @@ def test_activator_params_activate_and_gates_include_both_roles() -> None:
     assert len(library.activators()) == 1
 
 
-def test_merge_aggregates_and_dedups_with_provenance() -> None:
-    cello = load_cello()
-    activators = ComponentLibrary((_activator("ECF01", "sigma1"), _activator("ECF02", "sigma2")), name="ecf")
-    combined = merge(cello, activators, name="cello+ecf")
-    assert len(combined) == len(cello) + 2
-    assert len(combined.activators()) == 2 and len(combined.repressors()) == len(cello.repressors())
-    assert {c.corpus for c in combined.components} == {"cello", "ecf"}
-    # De-dup by id: merging a library with itself does not double it.
-    assert len(merge(activators, activators, name="x")) == 2
-
-
 def test_gate_availability_masks_used_regulator_across_roles() -> None:
     activator = _activator("ECF01", "sigma1")
     library = ComponentLibrary((activator,) + load_cello().repressors()[:2], name="mix")
@@ -168,12 +148,6 @@ def test_gate_availability_masks_used_regulator_across_roles() -> None:
     gates = library.gates()
     used = [g.regulator for g, ok in zip(gates, availability) if not ok]
     assert "sigma1" in used, "an already-used regulator is masked out regardless of role"
-
-
-def test_library_from_name_merges_composite() -> None:
-    # A composite name whose parts are all unknown returns None; a known single name resolves.
-    assert library_from_name("cello") is not None
-    assert library_from_name("cello+nope") is None
 
 
 def test_load_ecf_is_empty_without_a_corpus_file(tmp_path: Path) -> None:
@@ -208,17 +182,13 @@ def test_ecf_corpus_supplies_activators_and_merges_with_cello() -> None:
     assert len(ecf) >= 30 and ecf.activators() == ecf.gates(), "ECF corpus is all activators"
     assert all(c.quality == "literature" and c.corpus == "ecf" for c in ecf.components)
 
-    combined = library_from_name("cello+ecf")
-    assert combined is not None
-    assert len(combined.repressors()) == 63 and len(combined.activators()) == len(ecf)
-    # A mixed library lets a stage be an activator or a repressor: gates() spans both.
-    assert len(combined.gates()) == len(combined.repressors()) + len(combined.activators())
+    # A library holding both roles lets a stage be an activator or a repressor: gates() spans both.
+    assert ecf.gates() and all(c.role == "activator" for c in ecf.gates())
 
 
-def test_flat_csv_corpus_merges_with_cello(tmp_path: Path) -> None:
+def test_flat_csv_corpus_records_its_own_provenance(tmp_path: Path) -> None:
     path = tmp_path / "acts.csv"
     path.write_text("name,regulator,dynamic_range\nECF20_992,ECF20,50\n")
     ecf = load_flat_csv(path, corpus="ecf", default_role="activator")
-    combined = merge(load_cello(), ecf, name="cello+ecf")
-    assert len(combined.activators()) == 1
-    assert len(combined.gates()) == len(load_cello().repressors()) + 1
+    assert len(ecf.activators()) == 1
+    assert ecf.gates()[0].corpus == "ecf", "a Component carries the corpus it came from"

@@ -8,9 +8,9 @@ and :func:`apply_component` stamps a Component's kinetics, name, and id onto a n
 
 Characterization is scarcer than identity, so no single corpus is both large and rich: :func:`load_cello`
 supplies clean repressor and sensor kinetics but no activators; other corpora contribute the missing types.
-:func:`merge` aggregates several corpora into one library, and every Component carries its ``source`` and a
-``quality`` tag so a benchmark can tell a measured repressor from a literature-sourced activator and filter
-accordingly.
+Every Component carries its ``source`` and a ``quality`` tag, so a design can tell a measured repressor from
+a literature-sourced activator. Combining corpora is :func:`quiver.parts.combine`, which refuses libraries
+measured under different conditions.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from __future__ import annotations
 import csv
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Callable, Literal
+from typing import Literal
 
 from quiver.generate.realizable import clamp_realizable
 from quiver.grn import GRN, Node, ParamValue
@@ -60,19 +60,118 @@ class Component:
     # How the kinetics were obtained, for cross-corpus provenance: "measured" (a fitted response function),
     # "fitted" (fit here from induction curves), or "literature" (read from a paper's reported values).
     quality: str = "measured"
+    # The small molecule a sensor responds to, which is *not* its ``regulator``: a sensor's regulator is the
+    # transcription factor it acts through (the orthogonality key), while this is what goes into the flask.
+    # ``None`` for a non-sensor, or for a sensor whose source did not distinguish the two.
+    detects: str | None = None
 
     @property
     def corpus(self) -> str:
         """The coarse source corpus (the ``source`` prefix, e.g. ``"cello"`` from ``"cello:Eco1C1G1T1..."``)."""
         return self.source.split(":", 1)[0]
 
+    @classmethod
+    def repressor(
+        cls,
+        name: str,
+        *,
+        ymax: float,
+        ymin: float,
+        K: float | None = None,
+        n: float | None = None,
+        regulator: str | None = None,
+        quality: str = "measured",
+        source: str = "",
+    ) -> "Component":
+        """A repressor gate: its transcription factor drives the promoter down."""
+        return cls._gate("repressor", name, ymax, ymin, K, n, regulator, quality, source)
+
+    @classmethod
+    def activator(
+        cls,
+        name: str,
+        *,
+        ymax: float,
+        ymin: float,
+        K: float | None = None,
+        n: float | None = None,
+        regulator: str | None = None,
+        quality: str = "measured",
+        source: str = "",
+    ) -> "Component":
+        """An activator gate: its transcription factor drives the promoter up."""
+        return cls._gate("activator", name, ymax, ymin, K, n, regulator, quality, source)
+
+    @classmethod
+    def sensor(
+        cls,
+        name: str,
+        *,
+        detects: str,
+        ymax: float,
+        ymin: float,
+        K: float | None = None,
+        n: float | None = None,
+        regulator: str | None = None,
+        quality: str = "measured",
+        source: str = "",
+    ) -> "Component":
+        """An input sensor. ``detects`` is the molecule it responds to, which is distinct from the
+        ``regulator`` it acts through."""
+        component = cls._gate("sensor", name, ymax, ymin, K, n, regulator, quality, source)
+        return replace(component, detects=detects)
+
+    @classmethod
+    def reporter(
+        cls,
+        name: str,
+        *,
+        ymax: float = 1.0,
+        ymin: float = 0.0,
+        quality: str = "measured",
+        source: str = "",
+    ) -> "Component":
+        """A readout gene."""
+        return cls._gate("reporter", name, ymax, ymin, None, None, None, quality, source)
+
+    @classmethod
+    def _gate(
+        cls,
+        role: ComponentRole,
+        name: str,
+        ymax: float,
+        ymin: float,
+        K: float | None,
+        n: float | None,
+        regulator: str | None,
+        quality: str,
+        source: str,
+    ) -> "Component":
+        """Fill in what a declared part implies: its id, its own name as the default regulator, and the
+        dynamic range its levels give."""
+        return cls(
+            id=name,
+            name=name,
+            role=role,
+            regulator=regulator if regulator is not None else name,
+            family="",
+            organism="",
+            ymax=ymax,
+            ymin=ymin,
+            K=K,
+            n=n,
+            dynamic_range=ymax / ymin if ymin > 0.0 else float("inf"),
+            source=source,
+            quality=quality,
+        )
+
 
 @dataclass(frozen=True)
 class ComponentLibrary:
     """A collection of characterized Components (an SBOL Collection) the sampler draws from.
 
-    ``name`` identifies the source so a trained :class:`~quiver.portfolio.Designer` can record which library it
-    was grounded in and reload it (see :func:`library_from_name`)."""
+    ``name`` identifies the corpus a Component came from, which its ``source`` and ``id`` carry through to a
+    delivered design."""
 
     components: tuple[Component, ...]
     name: str = ""
@@ -105,11 +204,21 @@ class ComponentLibrary:
         return tuple(sorted((c for c in self.components if c.role == "sensor"), key=lambda c: c.id))
 
     def sensor_for(self, molecule: str) -> Component | None:
-        """A sensor Component that responds to ``molecule`` (matched on its regulator/inducer, case- and
-        suffix-insensitive so ``"aTc"`` matches an ``aTc_sensor``), preferring the widest dynamic range;
-        ``None`` if the library has no sensor for it."""
+        """A sensor Component that responds to ``molecule``, preferring the widest dynamic range; ``None``
+        if the library has no sensor for it.
+
+        Matched first on what the sensor ``detects`` --- the molecule itself --- then on its ``regulator``
+        and name for sources that did not distinguish the molecule from the transcription factor it acts
+        through (case- and suffix-insensitive, so ``"aTc"`` matches an ``aTc_sensor``).
+        """
         key = molecule.strip().lower()
-        matches = [c for c in self.sensors() if key == c.regulator.strip().lower() or key in c.name.strip().lower()]
+        matches = [
+            c
+            for c in self.sensors()
+            if key == (c.detects or "").strip().lower()
+            or key == c.regulator.strip().lower()
+            or key in c.name.strip().lower()
+        ]
         return max(matches, key=lambda c: c.dynamic_range) if matches else None
 
     def regulators(self) -> frozenset[str]:
@@ -176,7 +285,8 @@ def load_flat_csv(
     third-party corpora (the reusable half of multi-corpus aggregation).
 
     Columns: ``name`` (required); ``regulator`` (defaults to ``name``); optional ``role`` (defaults to
-    ``default_role``), ``family``, ``organism``, ``K``, ``n``, ``quality``, ``source``; and the levels, given
+    ``default_role``), ``family``, ``organism``, ``K``, ``n``, ``quality``, ``source``, ``detects`` (the
+    molecule a sensor responds to, when that differs from its ``regulator``); and the levels, given
     either as ``ymax`` + ``ymin`` or as ``dynamic_range`` alone (then ``ymin`` is a nominal OFF level and
     ``ymax = ymin * dynamic_range``). Returns an empty library if ``path`` is absent, so a corpus that has not
     been populated yet is a no-op rather than an error."""
@@ -214,6 +324,7 @@ def load_flat_csv(
                 dynamic_range=dr,
                 source=f"{corpus}:{ref}" if ref else corpus,
                 quality=(row.get("quality") or quality).strip(),
+                detects=(row.get("detects") or "").strip() or None,
             )
         )
     return ComponentLibrary(tuple(components), name=corpus)
@@ -226,39 +337,6 @@ def load_ecf(path: Path | None = None) -> ComponentLibrary:
     :func:`load_cello` they let a design alternate activation and repression instead of forming repressor
     chains only. Empty until the corpus CSV is populated (see ``data/ecf/README.md``)."""
     return load_flat_csv(path or _ECF_PATH, corpus="ecf", default_role="activator")
-
-
-def merge(*libraries: ComponentLibrary, name: str) -> ComponentLibrary:
-    """Aggregate several corpora into one :class:`ComponentLibrary`, de-duplicating by Component id (first
-    occurrence wins). This is how a large, type-rich library is built when no single corpus has everything:
-    e.g. ``merge(load_cello(), load_ecf(), name="cello+ecf")`` for repressors, sensors, and activators."""
-    seen: set[str] = set()
-    components: list[Component] = []
-    for library in libraries:
-        for component in library.components:
-            if component.id not in seen:
-                seen.add(component.id)
-                components.append(component)
-    return ComponentLibrary(tuple(components), name=name)
-
-
-# The named libraries a saved Designer can reload by name. Composite names (``"a+b"``) merge their parts.
-_LIBRARIES: dict[str, Callable[[], ComponentLibrary]] = {"cello": load_cello, "ecf": load_ecf}
-
-
-def library_from_name(name: str) -> ComponentLibrary | None:
-    """Rebuild a named :class:`ComponentLibrary` (as recorded by a saved Designer), or ``None`` if the name
-    is empty or unknown. A ``"+"``-joined name merges its named parts (e.g. ``"cello+ecf"``)."""
-    if not name:
-        return None
-    parts = name.split("+")
-    loaders = [_LIBRARIES.get(part) for part in parts]
-    if any(loader is None for loader in loaders):
-        return None
-    libraries = [loader() for loader in loaders if loader is not None]
-    if len(libraries) == 1:
-        return libraries[0]
-    return merge(*libraries, name=name)
 
 
 def component_to_params(component: Component) -> dict[str, ParamValue]:
@@ -317,16 +395,23 @@ def ground_operator(grn: GRN, node_id: str, component: Component) -> GRN:
 
 
 def ground_sensor(grn: GRN, library: ComponentLibrary, molecule: str) -> GRN:
-    """Ground every ungrounded ``receiver`` in ``grn`` with a sensor Component responding to ``molecule``;
-    a no-op if the library has no such sensor."""
+    """Ground every ungrounded ``receiver`` in ``grn`` with a sensor Component responding to ``molecule``,
+    and name the circuit's supplement for that molecule so the design reads as the assay it describes.
+    A no-op if the library has no such sensor."""
     sensor = library.sensor_for(molecule)
     if sensor is None:
         return grn
-    nodes = tuple(
-        apply_component(node, sensor) if node.kind == "receiver" and node.component_id is None else node
-        for node in grn.nodes
-    )
+    nodes = tuple(_grounded_input(node, sensor, molecule) for node in grn.nodes)
     return replace(grn, nodes=nodes)
+
+
+def _grounded_input(node: Node, sensor: Component, molecule: str) -> Node:
+    """A sensor stage grounded in ``sensor``, or a supplement renamed to the molecule being sensed."""
+    if node.kind == "receiver" and node.component_id is None:
+        return apply_component(node, sensor)
+    if node.kind == "supplement":
+        return replace(node, name=molecule)
+    return node
 
 
 def _optional_float(value: str | None) -> float | None:

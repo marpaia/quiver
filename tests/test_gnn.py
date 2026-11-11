@@ -1,3 +1,5 @@
+"""The graph policy: it reads a part-built circuit as a graph, behind the same conditioned interface."""
+
 from __future__ import annotations
 
 import random
@@ -6,16 +8,18 @@ import pytest
 
 pytest.importorskip("loica")
 
-from quiver import Designer, design  # noqa: E402
 from quiver.component import load_cello  # noqa: E402
-from quiver.grn import GRN, is_operator  # noqa: E402
+from quiver.grn import is_operator  # noqa: E402
 from quiver.learn import gnn  # noqa: E402
-from quiver.objective import TargetResponse, dose_response_match  # noqa: E402
+from quiver.learn.amortized import Brief  # noqa: E402
+from quiver.objective import inducible_response  # noqa: E402
 
-TARGETS = [
-    TargetResponse("GFP", ec50=1.0, dynamic_range=100.0, direction="up"),
-    TargetResponse("GFP", ec50=0.1, dynamic_range=50.0, direction="down"),
-]
+
+def _briefs() -> list[Brief]:
+    return [
+        Brief(encoding=(1.0, 0.0, 0.5), inducer="aTc", behavior=inducible_response("GFP", direction="up")),
+        Brief(encoding=(0.0, 1.0, 0.25), inducer="aTc", behavior=inducible_response("GFP", direction="down")),
+    ]
 
 
 def test_grounded_rollout_builds_orthogonal_component_circuit() -> None:
@@ -33,54 +37,28 @@ def test_grounded_rollout_builds_orthogonal_component_circuit() -> None:
     assert bool(log_prob.isfinite()), "the trajectory log-probability is finite"
 
 
-@pytest.mark.sim
-def test_grounded_design_portfolio_is_built_from_real_components() -> None:
-    library = load_cello()
-    behavior = dose_response_match(TARGETS[0])
-    portfolio = design(behavior, policy="gnn", library=library, budget=6, beta=1.0, tune_steps=0, threshold=0.0, seed=0)
-    assert len(portfolio) >= 1, "expected at least one grounded design"
-    for grn, _ in portfolio:
-        operators = [n for n in grn.nodes if is_operator(n.kind)]
-        assert all(n.component_id is not None for n in operators), "delivered operators are real Components"
-    # Grounded circuits still compile to LOICA with their real part names.
-    assert all(isinstance(net, object) for net in portfolio.networks())
+def test_conditioning_width_sizes_the_policy() -> None:
+    node = gnn.conditioned_policy(4, cond_mode="node")
+    head = gnn.conditioned_policy(4, cond_mode="head")
+    # "node" widens the per-node input; "head" leaves message passing on physical features alone.
+    assert node.embed.in_features == head.embed.in_features + 4
+    assert head.cond_dim == 4 and node.cond_dim == 0
 
 
 @pytest.mark.sim
-def test_unconditioned_gnn_trains_and_samples() -> None:
-    behavior = dose_response_match(TARGETS[0])
-    policy = gnn.train(behavior, steps=2, batch=2, beta=1.0, seed=0, entropy_coef=0.01)
-    circuits = gnn.sample_terminals(policy, 3, seed=1)
+def test_conditioned_graph_policy_samples_every_brief() -> None:
+    briefs = _briefs()
+    policy = gnn.train_conditioned(briefs, steps=2, batch=2, beta=1.0, seed=0)
+    for brief in briefs:
+        circuits = gnn.sample_conditioned(policy, brief, 3, seed=1)
+        assert len(circuits) == 3
+        assert all(c.topology_hash() for c in circuits)
+
+
+@pytest.mark.sim
+def test_head_conditioned_graph_policy_samples() -> None:
+    briefs = _briefs()
+    policy = gnn.train_conditioned(briefs, steps=2, batch=2, beta=1.0, seed=0, cond_mode="head")
+    assert policy.cond_dim == len(briefs[0].encoding)
+    circuits = gnn.sample_conditioned(policy, briefs[0], 3, seed=1, cond_mode="head")
     assert len(circuits) == 3
-    assert all(isinstance(c, GRN) for c in circuits)
-
-
-@pytest.mark.sim
-def test_conditioned_gnn_samples_valid_circuits() -> None:
-    policy = gnn.train_conditioned(TARGETS, steps=2, batch=2, beta=1.0, seed=0)
-    circuits = gnn.sample_conditioned(policy, TARGETS[0], 3, seed=1)
-    assert len(circuits) == 3
-    assert all(c.topology_hash() for c in circuits)
-
-
-@pytest.mark.sim
-def test_head_conditioned_gnn_feeds_target_to_heads() -> None:
-    # Head conditioning keeps physical features out of the node input and sizes the heads for the target.
-    policy = gnn.train_conditioned(TARGETS, steps=2, batch=2, beta=1.0, seed=0, cond_mode="head")
-    assert policy.cond_dim == 3
-    circuits = gnn.sample_conditioned(policy, TARGETS[0], 3, seed=1, cond_mode="head")
-    assert len(circuits) == 3
-    assert all(c.topology_hash() for c in circuits)
-
-
-@pytest.mark.sim
-def test_designer_gnn_roundtrips(tmp_path) -> None:
-    designer = Designer.train(TARGETS, steps=2, batch=2, beta=1.0, seed=0, arch="gnn")
-    assert designer.arch == "gnn"
-    designer.save_pretrained(tmp_path)
-    reloaded = Designer.from_pretrained(tmp_path)
-    assert reloaded.arch == "gnn"
-    # Deterministic sampling: the reloaded policy designs the same portfolio.
-    a = designer.design(TARGETS[0], budget=6, tune_steps=1, seed=2)
-    b = reloaded.design(TARGETS[0], budget=6, tune_steps=1, seed=2)
-    assert [c.topology_hash() for c in a.circuits] == [c.topology_hash() for c in b.circuits]

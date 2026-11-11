@@ -1,61 +1,87 @@
-"""A target-conditioned GFlowNet, the amortized sampler.
+"""The conditioned GFlowNet: one policy trained across a range of requests, sampled for any of them.
 
-The single-target GFlowNet (`gflownet.py`) learns one target's design distribution. This conditions the
-policy on the *target* (its EC50, dynamic range, direction), so one policy trained across a distribution
-of targets can be sampled for any target, including ones held out of training. That is the amortization
-claim: train once, design for many targets. Each training batch is a single target (so the VarGrad
-baseline, which estimates that target's normalizer, stays correct); training cycles through the targets.
+Amortization is what a GFlowNet is for. The policy is conditioned on an encoding of what is wanted, so one
+training run covers a whole range of requests and each is then sampled cheaply --- including requests held
+out of training. A single request is just the one-point case of the same machinery, so there is one sampler
+rather than a conditioned one and an unconditioned one.
+
+A :class:`Brief` is one conditioning point: how the request encodes, which inducer grounds the input sensor,
+and the detector that scores the result. Each training batch is a single brief, so the VarGrad baseline,
+which estimates that brief's normalizer, stays correct; training cycles through them.
 """
 
 from __future__ import annotations
 
-import math
 import random
+from dataclasses import dataclass
+from typing import Callable, Sequence
 
 import torch
 
-from quiver.component import ComponentLibrary
+from quiver.component import ComponentLibrary, gate_availability
 from quiver.gfn.env import ACTIONS, apply_action, available_actions
 from quiver.grn import GRN
 from quiver.learn._core import rollout, vargrad_step
 from quiver.learn.gflownet import PolicyNet, features, grounding_hooks
-from quiver.objective import TargetResponse, dose_response_match, score_once
+from quiver.objective.behavior import Behavior
+from quiver.objective.score import score_once
 
 _ACTION_INDEX = {name: index for index, name in enumerate(ACTIONS)}
-_TARGET_FEATURES = 3
-_CONDITIONED_FEATURES = 5 + _TARGET_FEATURES
+
+# The circuit-summary features every policy reads, before any conditioning is appended.
+SUMMARY_FEATURES = 5
 
 
-def target_features(target: TargetResponse) -> list[float]:
-    """A fixed-size encoding of a design target for the policy: log EC50, log dynamic range, direction."""
-    direction = {"up": 1.0, "down": 0.0}.get(target.direction, 0.5)
-    return [
-        math.log10(max(target.ec50, 1e-6)) / 3.0,
-        math.log10(max(target.dynamic_range, 1.0)) / 3.0,
-        direction,
-    ]
+def fillable_actions(library: ComponentLibrary | None) -> Callable[[GRN], list[str]]:
+    """The moves available from a state, with those the library cannot fill removed.
+
+    A grounded design assigns a distinct transcription factor to every stage, so once the library has no
+    unused gate left a further stage could only be left abstract --- unbuildable from this inventory.
+    Masking the move keeps the sampler's budget on circuits that can actually be assembled.
+    """
+
+    def available(grn: GRN) -> list[str]:
+        actions = available_actions(grn)
+        if library is not None and not any(gate_availability(grn, library)):
+            return [name for name in actions if name != "relay"]
+        return actions
+
+    return available
+
+
+@dataclass(frozen=True)
+class Brief:
+    """One conditioning point: what is wanted, which inducer to build the input from, and how to score it."""
+
+    encoding: tuple[float, ...]
+    inducer: str
+    behavior: Behavior
+
+
+def conditioned_policy(conditioning: int, n_components: int = 0) -> PolicyNet:
+    """A policy that reads the circuit summary plus ``conditioning`` numbers describing the request."""
+    return PolicyNet(in_features=SUMMARY_FEATURES + conditioning, n_components=n_components)
 
 
 def _sample_trajectory(
     policy: PolicyNet,
-    target: TargetResponse,
+    brief: Brief,
     rng: random.Random,
     max_steps: int,
     *,
     library: ComponentLibrary | None = None,
-    inducer: str = "aTc",
 ) -> tuple[GRN, torch.Tensor]:
-    encoding = target_features(target)
+    encoding = list(brief.encoding)
 
     def encode(grn: GRN, step: int) -> list[float]:
         return features(grn, step, max_steps) + encoding
 
-    initial, ground = grounding_hooks(policy, library, inducer, encode)
+    initial, ground = grounding_hooks(policy, library, brief.inducer, encode)
     return rollout(
         policy,
         actions=ACTIONS,
         action_index=_ACTION_INDEX,
-        available=available_actions,
+        available=fillable_actions(library),
         apply=apply_action,
         encode=encode,
         rng=rng,
@@ -66,38 +92,37 @@ def _sample_trajectory(
 
 
 def train_conditioned(
-    targets: list[TargetResponse],
+    briefs: Sequence[Brief],
     *,
     steps: int = 60,
     batch: int = 12,
     lr: float = 1e-2,
-    beta: float = 1.0,
+    beta: float = 4.0,
     floor: float = 1e-3,
     max_steps: int = 8,
     seed: int = 0,
     library: ComponentLibrary | None = None,
-    inducer: str = "aTc",
 ) -> PolicyNet:
-    """Train one target-conditioned policy across ``targets`` (one target per batch, cycling). Uses
+    """Train one conditioned policy across ``briefs`` (one brief per batch, cycling), using
     ``steps * batch`` simulations.
 
-    When ``library`` is given the amortized sampler is Component-grounded: one policy trained across the
-    target distribution assembles every design from real parts (the sensor from ``inducer``, each stage a
-    policy-chosen repressor), so a trained :class:`~quiver.portfolio.Designer` designs any target as a real
-    bill-of-Components with no retraining."""
+    With ``library`` every stage is grounded in a real Component as it is built, so one trained policy
+    assembles any of its briefs into a genuine bill of parts without retraining.
+    """
+    if not briefs:
+        raise ValueError("train_conditioned needs at least one brief")
     torch.manual_seed(seed)
     rng = random.Random(seed)
     n_components = len(library.gates()) if library is not None else 0
-    policy = PolicyNet(in_features=_CONDITIONED_FEATURES, n_components=n_components)
+    policy = conditioned_policy(len(briefs[0].encoding), n_components)
     optimizer = torch.optim.Adam(policy.parameters(), lr=lr)
     for step in range(steps):
-        target = targets[step % len(targets)]
-        behavior = dose_response_match(target)
+        brief = briefs[step % len(briefs)]
         log_probs = []
         log_rewards = []
         for _ in range(batch):
-            grn, log_prob = _sample_trajectory(policy, target, rng, max_steps, library=library, inducer=inducer)
-            reward = score_once(grn, behavior)
+            grn, log_prob = _sample_trajectory(policy, brief, rng, max_steps, library=library)
+            reward = score_once(grn, brief.behavior)
             log_probs.append(log_prob)
             log_rewards.append(beta * torch.log(torch.tensor(max(reward, 0.0) + floor)))
         vargrad_step(optimizer, log_probs, log_rewards)
@@ -106,21 +131,20 @@ def train_conditioned(
 
 def sample_conditioned(
     policy: PolicyNet,
-    target: TargetResponse,
+    brief: Brief,
     n: int,
     *,
     max_steps: int = 8,
     seed: int = 0,
     library: ComponentLibrary | None = None,
-    inducer: str = "aTc",
 ) -> list[GRN]:
-    """Sample ``n`` terminal circuits from a trained policy, conditioned on ``target``. With ``library`` the
-    circuits are Component-grounded (must match how the policy was trained)."""
+    """Sample ``n`` terminal circuits from a trained policy for one brief, with no retraining. ``library``
+    must match the one the policy was trained with."""
     torch.manual_seed(seed)
     rng = random.Random(seed)
     out: list[GRN] = []
     with torch.no_grad():
         for _ in range(n):
-            grn, _ = _sample_trajectory(policy, target, rng, max_steps, library=library, inducer=inducer)
+            grn, _ = _sample_trajectory(policy, brief, rng, max_steps, library=library)
             out.append(grn)
     return out

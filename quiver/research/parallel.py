@@ -3,8 +3,8 @@
 Every simulation is independent, so scoring a batch of candidates (across designs, held-out context shocks,
 seeds, or targets) is embarrassingly parallel. This module runs those over a process pool. The one
 constraint the design turns on: a behavior detector is a closure and does not pickle, so a worker receives a
-picklable :class:`SensorCell` (a design plus a :class:`TargetResponse` and optional shared context) and
-rebuilds the detector in-process, rather than being handed the closure.
+picklable :class:`ScoreCell` (a design plus the request it is judged against and an optional shared
+context) and rebuilds the detector in-process, rather than being handed the closure.
 
 The thread-count environment variables are pinned to one at import so a pool of workers each running an ODE
 integration does not oversubscribe the cores; the pool leaves two cores free for the parent and the OS.
@@ -30,7 +30,9 @@ from typing import Callable, Iterable, TypeVar, cast
 
 from quiver.generate.optimize import tune_score
 from quiver.grn import GRN
-from quiver.objective import TargetResponse, dose_response_match, score_once
+from quiver.intent import Intent
+from quiver.objective import score_once
+from quiver.report import acceptance
 from quiver.research.objective import Context, apply_context
 
 T = TypeVar("T")
@@ -92,24 +94,25 @@ def pmap(
 
 
 @dataclass(frozen=True)
-class SensorCell:
-    """One picklable unit of sensor scoring: a design against a target, optionally under a shared context.
+class ScoreCell:
+    """One picklable unit of scoring: a design against a request, optionally under a shared context.
 
-    ``context`` ``None`` scores the nominal dose-response window; a :class:`Context` applies the shared shock
-    (and its assay-window override) exactly as :func:`quiver.objective.score_under_context` does.
+    An :class:`~quiver.intent.Intent` is data rather than a closure, so a worker can rebuild the acceptance
+    detector from it. ``context`` ``None`` scores the nominal window; a :class:`Context` applies the shared
+    shock (and its assay-window override) exactly as :func:`quiver.objective.score_under_context` does.
     ``tune_steps`` ``0`` is a single simulation; a positive value runs the same local parameter tuning the
     search uses and returns the best score.
     """
 
     grn: GRN
-    target: TargetResponse
+    intent: Intent
     context: Context | None = None
     tune_steps: int = 0
     seed: int = 0
 
 
-def _run_sensor_cell(cell: SensorCell) -> float:
-    behavior = dose_response_match(cell.target)
+def _run_score_cell(cell: ScoreCell) -> float:
+    behavior = acceptance(cell.intent)
     grn = apply_context(cell.grn, cell.context) if cell.context is not None else cell.grn
     config = cell.context.config if cell.context is not None else None
     if cell.tune_steps > 0:
@@ -117,6 +120,6 @@ def _run_sensor_cell(cell: SensorCell) -> float:
     return score_once(grn, behavior, config)
 
 
-def score_cells(cells: Iterable[SensorCell], *, workers: int | None = None, chunksize: int = 4) -> list[float]:
-    """Score a batch of :class:`SensorCell` in parallel, in input order. Equal to the serial scores."""
-    return pmap(_run_sensor_cell, cells, workers=workers, chunksize=chunksize)
+def score_cells(cells: Iterable[ScoreCell], *, workers: int | None = None, chunksize: int = 4) -> list[float]:
+    """Score a batch of :class:`ScoreCell` in parallel, in input order. Equal to the serial scores."""
+    return pmap(_run_score_cell, cells, workers=workers, chunksize=chunksize)
