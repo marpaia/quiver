@@ -19,6 +19,14 @@ uses these `(ymax, ymin, K, n)` values to set the realizable parameter ranges it
 - Hill-parameter ranges over gates: `K` from 0.01 to 1.25 (median 0.13), `n` from 1.15 to 4.48 (median 2.72), dynamic range from 8.9 to 1.6×10³ (median 155). Sensor dynamic range from 12 to 3.4×10³ (median 211).
 - Values are in RPU (relative promoter units); `K` is in input-RPU.
 
+## Reading it from quiver
+
+This CSV predates the flat schema `quiver.parts` reads and is **not** directly loadable by it: it keys rows
+by `kind` rather than `role`, and its sensor rows name the transcription factor (`LacI`, `TetR`, `AraC`) in
+`regulator` with no `detects` column for the molecule each one actually responds to. `quiver.component.load_cello()`
+returns it as a bare `ComponentLibrary` for inspection. Designing from it needs a `detects` mapping recorded
+per sensor row, which is a data decision rather than something to infer.
+
 ## Files
 
 - `ingest_cello.py`: the ingestion.

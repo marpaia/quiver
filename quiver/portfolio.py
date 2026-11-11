@@ -1,330 +1,162 @@
-"""The high-level design entry point: turn a behavior objective into a portfolio of distinct circuits.
+"""The design call: say what you want the cell to do, get back a quiver of candidates.
 
-``design(behavior)`` is the one call an end user needs. It trains the diversity-seeking constructive GFlowNet,
-keeps the best score per distinct topology, filters to the ones that clear a pass threshold, and ranks them,
-returning a :class:`Portfolio` whose circuits compile straight to LOICA. ``policy`` selects the policy
-representation (``"gnn"`` or ``"mlp"``), and a ``library`` grounds every stage in a real SBOL Component. To
-design many targets without retraining, train a :class:`Designer` once and reuse it, or load a pretrained one
-from the Hugging Face Hub.
+:func:`design` takes the behavior as four orthogonal choices (:mod:`quiver.intent`) and parts looked up in
+your own library (:mod:`quiver.parts`). No argument describes the behavior as a number --- a quantity is
+something this library measures and reports, never something a design request has to supply. The parts
+carry the library they came from, so a design is grounded by construction and a circuit cannot mix two
+measurement conditions.
+
+A request is checked three ways before any search runs: for choices that contradict each other, for a
+behavior the parts cannot be judged against, and for one this library cannot yet construct. The last two
+are separate failures, because one is a gap in the data and the other a gap in the tool.
 """
 
 from __future__ import annotations
 
 import json
-import random
 from dataclasses import dataclass
-from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import Iterator, Sequence
 
 import torch
 from huggingface_hub import ModelHubMixin
 
-from quiver.component import library_from_name
-from quiver.generate import tune_best
+from quiver.component import ComponentLibrary
 from quiver.grn import GRN
-from quiver.learn.amortized import sample_conditioned, train_conditioned
-from quiver.learn.gflownet import PolicyNet, sample_terminals, train
-from quiver.learn.gnn import GraphPolicyNet
-from quiver.learn.gnn import sample_conditioned as sample_gnn_conditioned
-from quiver.learn.gnn import sample_terminals as sample_gnn
-from quiver.learn.gnn import train as train_gnn
-from quiver.learn.gnn import train_conditioned as train_gnn_conditioned
-from quiver.objective import buildable_objective, dose_response_match, to_loica
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
-
-    from quiver.component import ComponentLibrary
-    from quiver.objective import Behavior, ObjectiveFn, TargetResponse
-
-Design = tuple[GRN, float]
+from quiver.intent import (
+    Intent,
+    Logic,
+    Prefer,
+    Reads,
+    Responds,
+    Timing,
+    check_characterized,
+    check_consistent,
+    check_supported,
+)
+from quiver.learn import amortized, gnn
+from quiver.learn.amortized import Brief
+from quiver.objective.simulate import SimConfig, simulate
+from quiver.parts import DifferentConditions, Inducer, Organism, Parts, Provenance, Reporter, Strain
+from quiver.parts import parts as parts_from_csv
+from quiver.report import Report, acceptance, buildable, margins, measure
 
 
 @dataclass(frozen=True)
 class Portfolio:
-    """A ranked set of structurally distinct, high-scoring circuits for one objective.
+    """A batch of candidate circuits, each with what it does.
 
-    Iterates as ``(circuit, score)`` pairs in descending score order; every circuit is a distinct
-    topology. Compile them to LOICA with :meth:`networks`.
+    A simulation is only a proxy for behavior in a cell, so the batch is the deliverable: candidates that
+    fail for different reasons are likelier to contain one that works than the single best-scoring design.
+    Iterates as ``(circuit, report)`` pairs.
     """
 
-    designs: tuple[Design, ...]
+    entries: tuple[tuple[GRN, Report], ...]
+    asked: str = ""
+    # The nearest candidate that fell short, kept only to explain an empty batch.
+    closest: tuple[GRN, Report] | None = None
 
-    def __iter__(self) -> Iterator[Design]:
-        return iter(self.designs)
+    def __iter__(self) -> Iterator[tuple[GRN, Report]]:
+        return iter(self.entries)
 
     def __len__(self) -> int:
-        return len(self.designs)
+        return len(self.entries)
 
-    def __getitem__(self, index: int) -> Design:
-        return self.designs[index]
+    def __getitem__(self, index: int) -> tuple[GRN, Report]:
+        return self.entries[index]
 
     def __repr__(self) -> str:
-        top = f", top score {self.designs[0][1]:.3f}" if self.designs else ""
-        return f"Portfolio({len(self.designs)} distinct circuits{top})"
+        if not self.entries:
+            if self.closest is None:
+                return "no candidates"
+            unmet = self.closest[1].unmet()
+            why = unmet[0].shortfall() if unmet else "unknown"
+            return f"nothing did what you asked. the closest fell short on {why}"
+        layouts = len({grn.topology_hash() for grn, _ in self.entries})
+        return f"{len(self.entries)} candidates that do what you asked, " f"{layouts} different circuit layouts"
 
     @property
-    def best(self) -> Design:
-        """The highest-scoring ``(circuit, score)``."""
-        return self.designs[0]
+    def best(self) -> tuple[GRN, Report]:
+        """The highest-scoring candidate."""
+        return self.entries[0]
 
     @property
     def circuits(self) -> list[GRN]:
-        """The circuits, best first."""
-        return [grn for grn, _ in self.designs]
+        """The candidate circuits, best first."""
+        return [grn for grn, _ in self.entries]
 
-    @property
-    def scores(self) -> list[float]:
-        """The scores, descending."""
-        return [score for _, score in self.designs]
+    def networks(self) -> list[object]:
+        """Every candidate compiled to a LOICA ``GeneticNetwork``."""
+        return [grn.to_loica() for grn, _ in self.entries]
 
-    def networks(self) -> list[Any]:
-        """Compile every circuit to a LOICA ``GeneticNetwork``."""
-        return [to_loica(grn) for grn, _ in self.designs]
+    def sorted_by(self, prefer: Prefer) -> "Portfolio":
+        """The same candidates, re-ranked by a preference, without designing again."""
+        ranked = sorted(self.entries, key=lambda entry: entry[1].rank_by(prefer), reverse=True)
+        return Portfolio(tuple(ranked), self.asked, self.closest)
 
+    def best_for(self, prefer: Prefer) -> tuple[GRN, Report]:
+        """The candidate that best satisfies a preference."""
+        return self.sorted_by(prefer).entries[0]
 
-def design(
-    behavior: "Behavior",
-    *,
-    budget: int = 300,
-    policy: str = "gnn",
-    threshold: float = 0.5,
-    tune_steps: int = 2,
-    seed: int = 0,
-    beta: float = 4.0,
-    robust: bool = True,
-    ensemble: int = 8,
-    jitter: float = 0.3,
-    burden_capacity: float | None = 500.0,
-    objective: "ObjectiveFn | None" = None,
-    library: "ComponentLibrary | None" = None,
-    inducer: str = "aTc",
-) -> Portfolio:
-    """Design a portfolio of distinct, high-scoring circuits for ``behavior``.
-
-    The strategy is fixed: a diversity-seeking GFlowNet trains a policy for this behavior and samples a broad,
-    de-duplicated portfolio of distinct topologies from it. ``policy`` selects the *representation*, a
-    methodological choice, not a different strategy: ``"gnn"`` (default) is the graph-neural-network policy
-    over the circuit graph (:mod:`quiver.learn.gnn`), which discovers the broader single-target portfolio;
-    ``"mlp"`` is the feature-summary policy (:mod:`quiver.learn.gflownet`). ``budget`` is the generation
-    budget; ``threshold`` is the minimum score a circuit must clear to enter the portfolio; ``beta`` tunes the
-    GFlowNet reward exponent (higher sharpens toward the best circuits, lower spreads mass more evenly).
-
-    By default the search optimizes a *buildability-aware* objective (:func:`quiver.objective.buildable_objective`):
-    the target behavior's robustness over an ``ensemble`` of perturbed parameterizations, discounted by the
-    metabolic ``burden`` its topology imposes. This is the dense signal the search follows, and it is what the
-    portfolio's scores and ``threshold`` filter are read against. Set ``robust=False`` for the cheaper
-    single-simulation shape-match (one simulation per candidate instead of ``ensemble``), or pass a custom
-    ``objective`` (a circuit-to-scalar) to override entirely. To design many targets without retraining each
-    time, train a :class:`Designer` once and reuse it.
-    """
-    if objective is None and robust:
-        objective = buildable_objective(
-            behavior, ensemble=ensemble, jitter=jitter, seed=seed, burden_capacity=burden_capacity
-        )
-    raw = _generate(
-        behavior,
-        policy=policy,
-        budget=budget,
-        tune_steps=tune_steps,
-        seed=seed,
-        beta=beta,
-        objective=objective,
-        library=library,
-        inducer=inducer,
-    )
-    return _portfolio_from(raw, threshold)
-
-
-def _portfolio_from(raw: list[Design], threshold: float) -> Portfolio:
-    """Keep the best score per distinct topology above ``threshold``, ranked best-first."""
-    best: dict[str, Design] = {}
-    for grn, score in raw:
-        if score < threshold:
-            continue
-        key = grn.topology_hash()
-        if key not in best or score > best[key][1]:
-            best[key] = (grn, score)
-    ranked = sorted(best.values(), key=lambda design: design[1], reverse=True)
-    return Portfolio(tuple(ranked))
-
-
-def _generate(
-    behavior: "Behavior",
-    *,
-    policy: str,
-    budget: int,
-    tune_steps: int,
-    seed: int,
-    beta: float,
-    objective: "ObjectiveFn | None" = None,
-    library: "ComponentLibrary | None" = None,
-    inducer: str = "aTc",
-) -> list[Design]:
-    name = policy.lower()
-    # A Component-grounded design's kinetics are the real part values, so keep them exact (no parameter
-    # tuning) and score the grounded circuit directly; an abstract design still tunes its parameters.
-    steps = 0 if library is not None else tune_steps
-    rng = random.Random(seed)
-    if name in ("gnn", "graph"):
-        gnn_policy = train_gnn(behavior, beta=beta, seed=seed, objective=objective, library=library, inducer=inducer)
-        candidates = sample_gnn(gnn_policy, budget, seed=seed, library=library, inducer=inducer)
-        return [tune_best(grn, behavior, rng, steps, objective=objective) for grn in candidates]
-    if name in ("mlp", "gflownet", "gfn"):
-        mlp_policy = train(behavior, beta=beta, seed=seed, objective=objective, library=library, inducer=inducer)
-        candidates = sample_terminals(mlp_policy, budget, seed=seed, library=library, inducer=inducer)
-        return [tune_best(grn, behavior, rng, steps, objective=objective) for grn in candidates]
-    raise ValueError(f"unknown policy {policy!r}; choose 'gnn' or 'mlp'")
+    def build_sheet(self) -> str:
+        """The batch as something to hand to the bench: each candidate and the parts it is built from."""
+        lines = [self.asked, ""] if self.asked else []
+        for index, (grn, _) in enumerate(self.entries, start=1):
+            live = grn.effective()
+            names = [n.name for n in grn.nodes if n.component_id is not None and n.id in live]
+            lines.append(f"{index}. {' + '.join(names)}")
+        return "\n".join(lines)
 
 
 class Designer(ModelHubMixin):  # type: ignore[misc]
-    """A trained, target-conditioned sampler: train once, design portfolios for many targets.
+    """A trained sampler: train once, then design any request it was trained across, with no retraining.
 
-    This is the amortized path. Where :func:`design` runs a generator from scratch on every call,
-    :meth:`Designer.train` learns one policy across a distribution of sensor targets, and each
-    :meth:`design` call samples that policy for a target, cheaply and without retraining, including
-    targets held out of training.
+    Amortization is what a GFlowNet offers over a one-shot search, so it is the core of this API rather
+    than a variant of it: :func:`design` is the one-request case of the same machinery. Because the policy
+    is conditioned on each sensor's *measured properties* rather than its name, a trained designer also
+    handles an inducer it never saw.
 
     A trained designer follows the Hugging Face convention: :meth:`save_pretrained` writes it to a
-    directory, :meth:`from_pretrained` loads it from a directory or a Hub repo, and :meth:`push_to_hub`
-    publishes it (all inherited from ``ModelHubMixin``).
+    directory, :meth:`from_pretrained` loads it back, and :meth:`push_to_hub` publishes it. The parts it
+    was trained on are saved alongside the weights, because a designer without its library cannot ground
+    anything.
     """
 
     def __init__(
         self,
-        policy: Any,
+        policy: torch.nn.Module,
+        library: Parts,
+        *,
+        conditioning: int,
+        reads: Reads = Reads.SUMMARY,
         max_steps: int = 8,
-        arch: str = "mlp",
-        library: "ComponentLibrary | None" = None,
-        inducer: str = "aTc",
     ) -> None:
         self.policy = policy
-        self.max_steps = max_steps
-        self.arch = arch
         self.library = library
-        self.inducer = inducer
+        self.conditioning = conditioning
+        self.reads = reads
+        self.max_steps = max_steps
 
     def __repr__(self) -> str:
-        grounded = f", grounded in {self.library.name!r}" if self.library is not None else ""
-        return f"Designer(trained, arch={self.arch!r}, max_steps={self.max_steps}{grounded})"
-
-    @classmethod
-    def train(
-        cls,
-        targets: "Sequence[TargetResponse]",
-        *,
-        steps: int = 80,
-        batch: int = 12,
-        beta: float = 4.0,
-        max_steps: int = 8,
-        seed: int = 0,
-        arch: str = "mlp",
-        library: "ComponentLibrary | None" = None,
-        inducer: str = "aTc",
-    ) -> "Designer":
-        """Train a target-conditioned policy across ``targets`` (uses ``steps * batch`` simulations, once).
-
-        ``arch`` selects the policy representation: ``"mlp"`` (default) is the feature-summary policy
-        (:mod:`quiver.learn.amortized`); ``"gnn"`` is the graph policy over the circuit graph
-        (:mod:`quiver.learn.gnn`), which reads each node's kinetics and signed wiring.
-
-        With ``library`` the amortized policy is Component-grounded: it designs every target as a real
-        bill-of-Components with no retraining. Grounding is supported for the ``"mlp"`` arch (the stronger
-        amortizer); pass no ``library`` for the graph arch."""
-        if arch == "gnn":
-            policy = train_gnn_conditioned(
-                list(targets),
-                steps=steps,
-                batch=batch,
-                beta=beta,
-                max_steps=max_steps,
-                seed=seed,
-                library=library,
-                inducer=inducer,
-            )
-        else:
-            policy = train_conditioned(
-                list(targets),
-                steps=steps,
-                batch=batch,
-                beta=beta,
-                max_steps=max_steps,
-                seed=seed,
-                library=library,
-                inducer=inducer,
-            )
-        return cls(policy=policy, max_steps=max_steps, arch=arch, library=library, inducer=inducer)
-
-    def design(
-        self,
-        target: "TargetResponse",
-        *,
-        budget: int = 300,
-        threshold: float = 0.5,
-        tune_steps: int = 2,
-        seed: int = 0,
-    ) -> Portfolio:
-        """Design a portfolio for ``target`` by sampling the trained policy; no retraining. A
-        Component-grounded designer returns designs built from real parts, with kinetics kept exact."""
-        behavior = dose_response_match(target)
-        rng = random.Random(seed)
-        steps = 0 if self.library is not None else tune_steps
-        if self.arch == "gnn":
-            candidates = sample_gnn_conditioned(
-                self.policy,
-                target,
-                budget,
-                max_steps=self.max_steps,
-                seed=seed,
-                library=self.library,
-                inducer=self.inducer,
-            )
-        else:
-            candidates = sample_conditioned(
-                self.policy,
-                target,
-                budget,
-                max_steps=self.max_steps,
-                seed=seed,
-                library=self.library,
-                inducer=self.inducer,
-            )
-        raw = [tune_best(grn, behavior, rng, steps) for grn in candidates]
-        return _portfolio_from(raw, threshold)
+        return (
+            f"Designer(trained on {self.library.name!r}, measured in {self.library.strain}, "
+            f"reads={self.reads.name.lower()})"
+        )
 
     def _save_pretrained(self, save_directory: Path) -> None:
-        """Write the policy weights and architecture into ``save_directory`` (called by save_pretrained)."""
+        """Write the policy weights, its configuration, and the parts it was trained on."""
         torch.save(self.policy.state_dict(), save_directory / "policy.pt")
-        config: dict[str, Any] = {
+        self.library.to_csv(save_directory / "parts.csv")
+        config = {
             "format": "quiver-designer",
-            "quiver_version": _quiver_version(),
+            "conditioning": self.conditioning,
+            "reads": self.reads.name,
             "max_steps": self.max_steps,
-            "arch": self.arch,
-            "library": self.library.name if self.library is not None else None,
-            "inducer": self.inducer,
+            "library": self.library.name,
+            "strain": self.library.strain.name,
+            "organism": self.library.strain.organism.name,
+            "provenance": self.library.provenance.name,
         }
-        if self.arch == "gnn":
-            config.update(
-                {
-                    "in_features": self.policy.embed.in_features,
-                    "hidden": self.policy.embed.out_features,
-                    "layers": len(self.policy.layers),
-                    "n_reg": self.policy.n_reg,
-                    "cond_dim": self.policy.cond_dim,
-                    "n_components": self.policy.n_components,
-                }
-            )
-        else:
-            layers = list(self.policy.net)
-            config.update(
-                {
-                    "in_features": layers[0].in_features,
-                    "hidden": layers[0].out_features,
-                    "n_actions": layers[-1].out_features,
-                    "n_components": self.policy.n_components,
-                }
-            )
         (save_directory / "config.json").write_text(json.dumps(config, indent=2))
 
     @classmethod
@@ -332,44 +164,252 @@ class Designer(ModelHubMixin):  # type: ignore[misc]
         cls,
         *,
         model_id: str,
-        revision: "str | None" = None,
-        cache_dir: "str | Path | None" = None,
+        revision: str | None = None,
+        cache_dir: str | Path | None = None,
         force_download: bool = False,
         local_files_only: bool = False,
-        token: "str | bool | None" = None,
-        **kwargs: Any,
+        token: str | bool | None = None,
+        **kwargs: object,
     ) -> "Designer":
-        """Rebuild a designer from a resolved local directory (called by from_pretrained after download)."""
+        """Rebuild a designer, and the library it was trained on, from a resolved local directory."""
         directory = Path(model_id)
         config = json.loads((directory / "config.json").read_text())
-        arch = config.get("arch", "mlp")
-        policy: Any
-        if arch == "gnn":
-            policy = GraphPolicyNet(
-                in_features=config["in_features"],
-                hidden=config["hidden"],
-                layers=config["layers"],
-                n_reg=config["n_reg"],
-                cond_dim=config.get("cond_dim", 0),
-                n_components=config.get("n_components", 0),
-            )
+        library = parts_from_csv(
+            directory / "parts.csv",
+            strain=Strain(config["strain"], organism=Organism[config["organism"]]),
+            provenance=Provenance[config["provenance"]],
+            name=config["library"],
+        )
+        reads = Reads[config.get("reads", Reads.SUMMARY.name)]
+        gates = len(library.as_library().gates())
+        if reads is Reads.GRAPH:
+            policy = gnn.conditioned_policy(config["conditioning"], n_components=gates)
         else:
-            policy = PolicyNet(
-                in_features=config["in_features"],
-                hidden=config["hidden"],
-                n_actions=config["n_actions"],
-                n_components=config.get("n_components", 0),
-            )
+            policy = amortized.conditioned_policy(config["conditioning"], n_components=gates)
         policy.load_state_dict(torch.load(directory / "policy.pt", map_location="cpu"))
         policy.eval()
-        library = library_from_name(config.get("library") or "")
         return cls(
-            policy, max_steps=config["max_steps"], arch=arch, library=library, inducer=config.get("inducer", "aTc")
+            policy,
+            library,
+            conditioning=config["conditioning"],
+            reads=reads,
+            max_steps=config["max_steps"],
         )
 
+    def design(
+        self,
+        *,
+        reports: Reporter,
+        senses: Inducer | tuple[Inducer, ...] = (),
+        responds: Responds = Responds.UP,
+        logic: Logic = Logic.PRESENT,
+        memory: bool = False,
+        timing: Timing = Timing.SUSTAINED,
+        prefer: Prefer | None = None,
+        candidates: int = 8,
+        explore: int = 120,
+        seed: int = 0,
+    ) -> Portfolio:
+        """Design a batch for one request by sampling the trained policy. No retraining."""
+        intent = _resolve(reports, senses, responds, logic, memory, timing)
+        if intent.library.conditions != self.library.conditions:
+            raise DifferentConditions(
+                f"this designer was trained on parts measured in {self.library.strain}, but the request "
+                f"uses parts measured in {intent.library.strain}."
+            )
+        if len(intent.features()) != self.conditioning:
+            raise ValueError(
+                f"this designer was trained on {self.conditioning}-number requests but this one encodes to "
+                f"{len(intent.features())}; it was trained by a different version."
+            )
+        library = self.library.as_library()
+        sampler = gnn if self.reads is Reads.GRAPH else amortized
+        sampled = sampler.sample_conditioned(
+            self.policy,
+            _brief(intent),
+            explore,
+            max_steps=self.max_steps,
+            seed=seed,
+            library=library,
+        )
+        return _collect(sampled, intent, library, prefer=prefer, candidates=candidates)
 
-def _quiver_version() -> str:
-    try:
-        return version("quiver")
-    except PackageNotFoundError:
-        return "unknown"
+
+def train(
+    library: Parts,
+    *,
+    reports: Reporter,
+    over: Sequence[Inducer] | None = None,
+    responds: Sequence[Responds] = (Responds.UP, Responds.DOWN),
+    reads: Reads = Reads.SUMMARY,
+    steps: int = 60,
+    batch: int = 8,
+    beta: float = 4.0,
+    max_steps: int = 8,
+    seed: int = 0,
+) -> Designer:
+    """Train one policy across a range of requests, so each can then be designed cheaply.
+
+    ``over`` is the signals to amortize across, defaulting to every molecule ``library`` can sense, and
+    ``responds`` the directions. The trained :class:`Designer` designs any combination of them --- and,
+    because conditioning is on measured sensor properties rather than identity, signals it did not train
+    on. ``reads`` selects how the policy sees a part-built circuit, which is a representation choice within
+    one strategy rather than a different strategy.
+    """
+    signals = tuple(over) if over is not None else tuple(library.inducer(m) for m in library.detectable())
+    if not signals:
+        raise ValueError(f"{library.name or 'this library'} has no sensors to design around")
+    briefs: list[Brief] = []
+    for inducer in signals:
+        for direction in responds:
+            intent = _resolve(reports, inducer, direction, Logic.PRESENT, False, Timing.SUSTAINED)
+            _validate(intent)
+            briefs.append(_brief(intent))
+    sampler = gnn if reads is Reads.GRAPH else amortized
+    policy = sampler.train_conditioned(
+        briefs,
+        steps=steps,
+        batch=batch,
+        beta=beta,
+        max_steps=max_steps,
+        seed=seed,
+        library=library.as_library(),
+    )
+    return Designer(policy, library, conditioning=len(briefs[0].encoding), reads=reads, max_steps=max_steps)
+
+
+def design(
+    *,
+    reports: Reporter,
+    senses: Inducer | tuple[Inducer, ...] = (),
+    responds: Responds = Responds.UP,
+    logic: Logic = Logic.PRESENT,
+    memory: bool = False,
+    timing: Timing = Timing.SUSTAINED,
+    prefer: Prefer | None = None,
+    reads: Reads = Reads.SUMMARY,
+    candidates: int = 8,
+    explore: int = 120,
+    steps: int = 40,
+    batch: int = 8,
+    seed: int = 0,
+) -> Portfolio:
+    """Design a batch of circuits that do what you describe.
+
+    ``reports`` is the readout and ``senses`` the signal or signals, both looked up in your own library.
+    ``responds``, ``logic``, ``memory`` and ``timing`` are the behavior. ``prefer`` favors a direction among
+    candidates that otherwise do the job, and can also be applied afterwards with
+    :meth:`Portfolio.sorted_by`. ``candidates`` is how many designs come back, and ``explore`` how many are
+    sampled to choose them from.
+
+    This trains a policy for this one request and discards it. To design many requests, train a
+    :class:`Designer` once with :func:`train` and reuse it.
+    """
+    intent = _resolve(reports, senses, responds, logic, memory, timing)
+    _validate(intent)
+    sampler = gnn if reads is Reads.GRAPH else amortized
+    policy = sampler.train_conditioned(
+        [_brief(intent)],
+        steps=steps,
+        batch=batch,
+        beta=4.0,
+        seed=seed,
+        library=intent.library.as_library(),
+    )
+    designer = Designer(policy, intent.library, conditioning=len(intent.features()), reads=reads)
+    return designer.design(
+        reports=reports,
+        senses=senses,
+        responds=responds,
+        logic=logic,
+        memory=memory,
+        timing=timing,
+        prefer=prefer,
+        candidates=candidates,
+        explore=explore,
+        seed=seed,
+    )
+
+
+def _resolve(
+    reports: Reporter,
+    senses: Inducer | tuple[Inducer, ...],
+    responds: Responds,
+    logic: Logic,
+    memory: bool,
+    timing: Timing,
+) -> Intent:
+    """Normalize a design request into an :class:`~quiver.intent.Intent`."""
+    inducers = (senses,) if isinstance(senses, Inducer) else tuple(senses)
+    return Intent(reports=reports, senses=inducers, responds=responds, logic=logic, memory=memory, timing=timing)
+
+
+def _validate(intent: Intent) -> None:
+    """Refuse a request that contradicts itself, outruns the parts, or outruns the circuit builder."""
+    _check_one_library(intent)
+    check_consistent(intent)
+    check_characterized(intent)
+    check_supported(intent)
+
+
+def _brief(intent: Intent) -> Brief:
+    """The conditioning point a sampler trains on or samples for."""
+    return Brief(
+        encoding=tuple(intent.features()),
+        inducer=intent.senses[0].molecule if intent.senses else "",
+        behavior=acceptance(intent),
+    )
+
+
+def _check_one_library(intent: Intent) -> None:
+    """Refuse a design whose parts were measured under different conditions."""
+    libraries = [inducer.library for inducer in intent.senses]
+    if intent.reports.library is not None:
+        libraries.append(intent.reports.library)
+    for other in libraries[1:]:
+        if other.conditions != libraries[0].conditions:
+            raise DifferentConditions(
+                f"these parts come from libraries measured in {libraries[0].strain} and {other.strain}. "
+                "One circuit cannot mix measurement conditions."
+            )
+
+
+def _collect(
+    sampled: list[GRN],
+    intent: Intent,
+    library: ComponentLibrary,
+    *,
+    prefer: Prefer | None,
+    candidates: int,
+) -> Portfolio:
+    """Score the sampled circuits and return the ones that do what was asked.
+
+    A candidate that already fails in simulation, or that leaves a stage with no part to order, is the
+    cheapest possible rejection, so it is not delivered: the batch spans designs that work and might still
+    fail differently at the bench. When nothing works, the nearest miss is kept so the batch can say which
+    requirement fell short.
+    """
+    config = SimConfig()
+    asked = intent.describe()
+    best: dict[str, tuple[GRN, Report]] = {}
+    for candidate in sampled:
+        # A structural move can leave a branch that no longer reaches the reporter. Pruning it changes no
+        # behavior and makes two designs that differ only in dead weight one design.
+        grn = candidate.pruned()
+        result = simulate(grn, config)
+        measured = measure(grn, result, intent, library)
+        requirements = margins(measured, result, intent)
+        if library is not None:
+            requirements += (buildable(grn),)
+        report = Report(asked=asked, measured=measured, requirements=requirements)
+        # Keyed on wiring *and* parts: two circuits wired alike but built from different transcription
+        # factors are different constructs that fail for different reasons at the bench, which is the
+        # diversity worth delivering.
+        key = grn.structural_hash()
+        if key not in best or report.score > best[key][1].score:
+            best[key] = (grn, report)
+    ranked = sorted(best.values(), key=lambda entry: entry[1].score, reverse=True)
+    working = [entry for entry in ranked if entry[1].meets]
+    closest = next((entry for entry in ranked if not entry[1].meets), None)
+    portfolio = Portfolio(tuple(working[:candidates]), asked, closest if not working else None)
+    return portfolio.sorted_by(prefer) if prefer is not None else portfolio

@@ -13,16 +13,22 @@ from quiver.grn import GRN, Node, ParamValue, is_operator
 
 
 def to_mermaid(grn: GRN) -> str:
-    """A Mermaid ``flowchart LR`` string for ``grn``."""
+    """A Mermaid ``flowchart LR`` string for ``grn``.
+
+    Diagram identifiers are assigned in node order rather than taken from the design's internal node ids,
+    which a structural move can leave carrying a random suffix. The identifiers carry no meaning, so a
+    readable diagram is the same diagram.
+    """
     reg_labels = _regulator_labels(grn)
+    ids = {node.id: f"n{index}" for index, node in enumerate(grn.nodes)}
     lines = ["flowchart LR"]
     for node in grn.nodes:
-        lines.append(f"  {node.id}{_shape(node, reg_labels)}")
+        lines.append(f"  {ids[node.id]}{_shape(node, reg_labels)}")
     for edge in grn.edges:
         source, target = grn.node(edge.source), grn.node(edge.target)
         label, dashed = _edge_style(source, target)
         arrow = f"-. {label} .->" if dashed else f"-- {label} -->"
-        lines.append(f"  {edge.source} {arrow} {edge.target}")
+        lines.append(f"  {ids[edge.source]} {arrow} {ids[edge.target]}")
     return "\n".join(lines)
 
 

@@ -6,9 +6,27 @@ import random
 
 import pytest
 
-from quiver.objective import dose_response_match, score_once, sensor_target_manifold
+from quiver import Responds, Strain, parts
+from quiver.intent import Intent
+from quiver.objective import score_once
+from quiver.report import acceptance
 from quiver.research.objective import Context, score_under_context
-from quiver.research.parallel import SensorCell, default_workers, pmap, score_cells
+from quiver.research.parallel import ScoreCell, default_workers, pmap, score_cells
+
+_ROWS = [
+    "id,name,role,regulator,detects,family,organism,ymax,ymin,K,n,quality",
+    "p1,PhlF,repressor,PhlF,,TetR,Eco,3.9,0.01,0.03,4.0,measured",
+    "s1,AraC_sensor,sensor,AraC,arabinose,sensor,Eco,2.5,0.008,,,measured",
+    "r1,GFP,reporter,GFP,,reporter,Eco,1.0,0.001,,,measured",
+]
+
+
+def _intents(tmp_path) -> list[Intent]:
+    path = tmp_path / "inventory.csv"
+    path.write_text("\n".join(_ROWS) + "\n")
+    inventory = parts(path, strain=Strain("MG1655"))
+    gfp, ara = inventory.reporter("GFP"), inventory.inducer("arabinose")
+    return [Intent(reports=gfp, senses=(ara,), responds=d) for d in (Responds.UP, Responds.DOWN)]
 
 
 def _square(x: int) -> int:
@@ -30,22 +48,21 @@ def test_default_workers_leaves_headroom() -> None:
 
 
 @pytest.mark.sim
-def test_score_cells_equals_serial_scoring() -> None:
+def test_score_cells_equals_serial_scoring(tmp_path) -> None:
     pytest.importorskip("loica")
     from quiver.generate import random_sensor
 
-    targets = sensor_target_manifold(3, seed=0)
     rng = random.Random(0)
     grns = [random_sensor(rng, max_regulators=4) for _ in range(3)]
     contexts: list[Context | None] = [None, Context("host-weak", alpha_mult=0.3)]
 
-    cells: list[SensorCell] = []
+    cells: list[ScoreCell] = []
     expected: list[float] = []
-    for target in targets:
-        behavior = dose_response_match(target)
+    for intent in _intents(tmp_path):
+        behavior = acceptance(intent)
         for grn in grns:
             for ctx in contexts:
-                cells.append(SensorCell(grn=grn, target=target, context=ctx))
+                cells.append(ScoreCell(grn=grn, intent=intent, context=ctx))
                 expected.append(score_once(grn, behavior) if ctx is None else score_under_context(grn, behavior, ctx))
 
     assert score_cells(cells, workers=4) == expected

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import math
 import random
+from typing import Sequence
 
 import torch
 
@@ -32,8 +33,8 @@ from quiver.gfn.env import initial_sensor
 from quiver.gfn.structured_env import MAX_REG, STRUCTURED_ACTIONS, apply_structured_action, available_structured_actions
 from quiver.grn import GRN, Node, ParamValue, is_operator
 from quiver.learn._core import vargrad_step
-from quiver.learn.amortized import target_features
-from quiver.objective import Behavior, ObjectiveFn, TargetResponse, dose_response_match, score_once
+from quiver.learn.amortized import Brief
+from quiver.objective import score_once
 
 nn = torch.nn
 
@@ -41,8 +42,6 @@ nn = torch.nn
 _KINDS: tuple[str, ...] = ("regulator", "reporter", "supplement", "source", "receiver", "hill1", "hill2", "sum")
 # One-hot(kind) + [is_operator, sign, log10(K), n/5, log10(dynamic range), degradation, construction progress].
 _N_FEATURES = len(_KINDS) + 7
-# The target encoding appended to every node when the policy is target-conditioned (log EC50, log range, dir).
-_TARGET_FEATURES = 3
 
 _ACTION_INDEX = {name: index for index, name in enumerate(STRUCTURED_ACTIONS)}
 
@@ -105,18 +104,18 @@ def _row_normalize(matrix: torch.Tensor) -> torch.Tensor:
 
 
 def graph_tensors(
-    grn: GRN, step: int, max_steps: int, target: TargetResponse | None = None
+    grn: GRN, step: int, max_steps: int, encoding: Sequence[float] | None = None
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, list[int]]:
     """Encode a partial circuit as ``(node features, forward adjacency, backward adjacency, regulator rows)``.
 
     Forward adjacency mean-aggregates a node's successors, backward its predecessors, so directed message
     passing sees regulatory direction. ``regulator rows`` lists the regulator node indices in construction
-    order, the indexing the per-regulator action head addresses. ``target``, if given, appends its encoding
-    to every node's feature row, so the conditioned policy reads the design target."""
+    order, the indexing the per-regulator action head addresses. ``encoding``, if given, is appended to every
+    node's feature row, so the conditioned policy reads what was asked for."""
     nodes = list(grn.nodes)
     row = {node.id: i for i, node in enumerate(nodes)}
-    encoding = target_features(target) if target is not None else []
-    features = torch.tensor([_node_features(node, step, max_steps) + encoding for node in nodes], dtype=torch.float32)
+    extra = list(encoding) if encoding else []
+    features = torch.tensor([_node_features(node, step, max_steps) + extra for node in nodes], dtype=torch.float32)
     adjacency = torch.zeros((len(nodes), len(nodes)))
     for edge in grn.edges:
         if edge.source in row and edge.target in row:
@@ -223,21 +222,21 @@ def _rollout(
     policy: GraphPolicyNet,
     rng: random.Random,
     max_steps: int,
-    target: TargetResponse | None = None,
+    encoding: Sequence[float] | None = None,
     cond_mode: str = "node",
 ) -> tuple[GRN, torch.Tensor, torch.Tensor]:
     """Sample one construction trajectory to a terminal circuit, returning it, its log-probability, and the
-    summed per-step policy entropy (for the optional entropy regularizer). ``target`` conditions the policy;
-    ``cond_mode`` selects how: ``"node"`` appends the target to node input features, ``"head"`` feeds it to
+    summed per-step policy entropy (for the optional entropy regularizer). ``encoding`` conditions the
+    policy; ``cond_mode`` selects how: ``"node"`` appends it to node input features, ``"head"`` feeds it to
     the action heads (undiluted by message passing)."""
-    head_cond = target is not None and cond_mode == "head"
-    cond = torch.tensor(target_features(target), dtype=torch.float32) if head_cond and target else None
-    feature_target = None if cond_mode == "head" else target
+    head_cond = encoding is not None and cond_mode == "head"
+    cond = torch.tensor(list(encoding), dtype=torch.float32) if head_cond and encoding else None
+    node_encoding = None if cond_mode == "head" else encoding
     grn = initial_sensor()
     log_prob = torch.zeros(())
     entropy = torch.zeros(())
     for step in range(max_steps):
-        features, forward, backward, regulator_rows = graph_tensors(grn, step, max_steps, feature_target)
+        features, forward, backward, regulator_rows = graph_tensors(grn, step, max_steps, node_encoding)
         logits = policy(features, forward, backward, regulator_rows, cond)
         mask = torch.full((len(STRUCTURED_ACTIONS),), float("-inf"))
         for name in available_structured_actions(grn):
@@ -257,7 +256,7 @@ def _ground_pending(
     policy: GraphPolicyNet,
     grn: GRN,
     library: ComponentLibrary,
-    feature_target: TargetResponse | None,
+    node_encoding: Sequence[float] | None,
     cond: torch.Tensor | None,
 ) -> tuple[GRN, torch.Tensor]:
     """Ground every not-yet-grounded ``hill1`` stage in ``grn`` by sampling a gate Component (repressor or
@@ -270,7 +269,7 @@ def _ground_pending(
         available = gate_availability(grn, library)
         if not any(available):
             break
-        features, forward, backward, _ = graph_tensors(grn, 0, 1, feature_target)
+        features, forward, backward, _ = graph_tensors(grn, 0, 1, node_encoding)
         logits = policy.component_logits(features, forward, backward, cond)
         mask = torch.tensor([0.0 if ok else float("-inf") for ok in available])
         log_probs = torch.log_softmax(logits + mask, dim=-1)
@@ -286,26 +285,30 @@ def _grounded_rollout(
     max_steps: int,
     library: ComponentLibrary,
     inducer: str,
-    target: TargetResponse | None = None,
+    encoding: Sequence[float] | None = None,
     cond_mode: str = "node",
 ) -> tuple[GRN, torch.Tensor, torch.Tensor]:
     """Like :func:`_rollout`, but every stage is grounded in a real SBOL Component as it is built: the input
     sensor from ``inducer``, and each ``hill1`` stage (the initial one and every relayed one) by a policy
     Component choice. The trajectory log-probability sums the structural and Component choices, so VarGrad
     trains the joint topology-and-assignment sampler; the reward is scored on the grounded circuit."""
-    head_cond = target is not None and cond_mode == "head"
-    cond = torch.tensor(target_features(target), dtype=torch.float32) if head_cond and target else None
-    feature_target = None if cond_mode == "head" else target
+    head_cond = encoding is not None and cond_mode == "head"
+    cond = torch.tensor(list(encoding), dtype=torch.float32) if head_cond and encoding else None
+    node_encoding = None if cond_mode == "head" else encoding
     grn = ground_sensor(initial_sensor(), library, inducer)
     log_prob = torch.zeros(())
     entropy = torch.zeros(())
-    grn, ground_lp = _ground_pending(policy, grn, library, feature_target, cond)
+    grn, ground_lp = _ground_pending(policy, grn, library, node_encoding, cond)
     log_prob = log_prob + ground_lp
     for step in range(max_steps):
-        features, forward, backward, regulator_rows = graph_tensors(grn, step, max_steps, feature_target)
+        features, forward, backward, regulator_rows = graph_tensors(grn, step, max_steps, node_encoding)
         logits = policy(features, forward, backward, regulator_rows, cond)
         mask = torch.full((len(STRUCTURED_ACTIONS),), float("-inf"))
+        fillable = any(gate_availability(grn, library))
         for name in available_structured_actions(grn):
+            # Once no unused gate is left, a further stage could only be left abstract.
+            if name.startswith("relay") and not fillable:
+                continue
             mask[_ACTION_INDEX[name]] = 0.0
         log_probs = torch.log_softmax(logits + mask, dim=-1)
         probs = log_probs.exp()
@@ -315,95 +318,22 @@ def _grounded_rollout(
         if STRUCTURED_ACTIONS[index] == "stop":
             break
         grn = apply_structured_action(grn, STRUCTURED_ACTIONS[index], rng)
-        grn, ground_lp = _ground_pending(policy, grn, library, feature_target, cond)
+        grn, ground_lp = _ground_pending(policy, grn, library, node_encoding, cond)
         log_prob = log_prob + ground_lp
     return grn, log_prob, entropy
 
 
-def train(
-    behavior: Behavior,
-    *,
-    steps: int = 40,
-    batch: int = 12,
-    lr: float = 1e-2,
-    beta: float = 1.0,
-    floor: float = 1e-3,
-    max_steps: int = 8,
-    seed: int = 0,
-    objective: ObjectiveFn | None = None,
-    entropy_coef: float = 0.0,
-    library: ComponentLibrary | None = None,
-    inducer: str = "aTc",
-) -> GraphPolicyNet:
-    """Train the graph policy to sample topologies in proportion to ``reward ** beta`` (VarGrad).
-
-    Same objective and structured action space as :func:`quiver.learn.structured.train`; only the policy
-    representation changes (graph message passing over physical node features rather than an MLP over a
-    five-number summary), so a run is a head-to-head architecture comparison. ``objective`` sets the reward
-    (default the ``score_once`` shape-match); pass :func:`quiver.objective.buildable_objective` to train
-    against the buildability-aware signal. ``entropy_coef`` adds a trajectory-entropy bonus that counters the
-    policy concentrating on a few (regulator-cap) topologies at high ``beta``.
-
-    When ``library`` is given the sampler is *Component-grounded*: every stage is built from a real SBOL
-    Component (the sensor from ``inducer``, each ``hill1`` from a policy-chosen gate --- repressor or
-    activator --- orthogonally), and the reward is scored on the grounded circuit."""
-    torch.manual_seed(seed)
-    rng = random.Random(seed)
-    n_components = len(library.gates()) if library is not None else 0
-    policy = GraphPolicyNet(n_components=n_components)
-    optimizer = torch.optim.Adam(policy.parameters(), lr=lr)
-    for _ in range(steps):
-        log_probs = []
-        log_rewards = []
-        entropies = []
-        for _ in range(batch):
-            if library is not None:
-                grn, log_prob, entropy = _grounded_rollout(policy, rng, max_steps, library, inducer)
-            else:
-                grn, log_prob, entropy = _rollout(policy, rng, max_steps)
-            reward = objective(grn) if objective is not None else score_once(grn, behavior)
-            log_probs.append(log_prob)
-            log_rewards.append(beta * torch.log(torch.tensor(max(reward, 0.0) + floor)))
-            entropies.append(entropy)
-        vargrad_step(optimizer, log_probs, log_rewards, entropies=entropies, entropy_coef=entropy_coef)
-    return policy
-
-
-def sample_terminals(
-    policy: GraphPolicyNet,
-    n: int,
-    *,
-    max_steps: int = 8,
-    seed: int = 0,
-    library: ComponentLibrary | None = None,
-    inducer: str = "aTc",
-) -> list[GRN]:
-    """Sample ``n`` terminal circuits from a trained graph policy (no gradient). With ``library`` the circuits
-    are Component-grounded (must match how the policy was trained)."""
-    torch.manual_seed(seed)
-    rng = random.Random(seed)
-    out: list[GRN] = []
-    with torch.no_grad():
-        for _ in range(n):
-            if library is not None:
-                grn, _, _ = _grounded_rollout(policy, rng, max_steps, library, inducer)
-            else:
-                grn, _, _ = _rollout(policy, rng, max_steps)
-            out.append(grn)
-    return out
-
-
-def conditioned_policy(cond_mode: str = "node", n_components: int = 0) -> GraphPolicyNet:
-    """A graph policy sized for target conditioning. ``"node"`` appends the target encoding to node input
-    features; ``"head"`` feeds it to the action heads instead (physical features only enter message passing).
-    ``n_components > 0`` adds a Component head for a grounded conditioned policy."""
+def conditioned_policy(conditioning: int, cond_mode: str = "node", n_components: int = 0) -> GraphPolicyNet:
+    """A graph policy sized to read ``conditioning`` numbers describing the request. ``"node"`` appends them
+    to node input features; ``"head"`` feeds them to the action heads instead, so only physical features
+    enter message passing. ``n_components > 0`` adds a Component head for a grounded policy."""
     if cond_mode == "head":
-        return GraphPolicyNet(in_features=_N_FEATURES, cond_dim=_TARGET_FEATURES, n_components=n_components)
-    return GraphPolicyNet(in_features=_N_FEATURES + _TARGET_FEATURES, n_components=n_components)
+        return GraphPolicyNet(in_features=_N_FEATURES, cond_dim=conditioning, n_components=n_components)
+    return GraphPolicyNet(in_features=_N_FEATURES + conditioning, n_components=n_components)
 
 
 def train_conditioned(
-    targets: list[TargetResponse],
+    briefs: Sequence[Brief],
     *,
     steps: int = 60,
     batch: int = 12,
@@ -415,30 +345,32 @@ def train_conditioned(
     entropy_coef: float = 0.0,
     cond_mode: str = "node",
     library: ComponentLibrary | None = None,
-    inducer: str = "aTc",
 ) -> GraphPolicyNet:
-    """Train one target-conditioned graph policy across ``targets`` (one target per batch, cycling), the
-    graph-policy analogue of :func:`quiver.learn.amortized.train_conditioned`. ``cond_mode`` selects how the
-    target enters (``"node"`` into node features, ``"head"`` into the action heads); a single policy serves
-    the whole distribution. Uses ``steps * batch`` simulations. With ``library`` the amortized graph policy is
-    Component-grounded, so a trained designer builds every target as a real bill-of-Components."""
+    """Train one conditioned graph policy across ``briefs`` (one brief per batch, cycling), the graph-policy
+    counterpart of :func:`quiver.learn.amortized.train_conditioned`. ``cond_mode`` selects how the request
+    enters (``"node"`` into node features, ``"head"`` into the action heads); one policy serves them all.
+    Uses ``steps * batch`` simulations. With ``library`` every stage is grounded in a real Component, so a
+    trained designer builds any of its briefs into a genuine bill of parts."""
+    if not briefs:
+        raise ValueError("train_conditioned needs at least one brief")
     torch.manual_seed(seed)
     rng = random.Random(seed)
     n_components = len(library.gates()) if library is not None else 0
-    policy = conditioned_policy(cond_mode, n_components)
+    policy = conditioned_policy(len(briefs[0].encoding), cond_mode, n_components)
     optimizer = torch.optim.Adam(policy.parameters(), lr=lr)
     for step in range(steps):
-        target = targets[step % len(targets)]
-        behavior = dose_response_match(target)
+        brief = briefs[step % len(briefs)]
         log_probs = []
         log_rewards = []
         entropies = []
         for _ in range(batch):
             if library is not None:
-                grn, log_prob, entropy = _grounded_rollout(policy, rng, max_steps, library, inducer, target, cond_mode)
+                grn, log_prob, entropy = _grounded_rollout(
+                    policy, rng, max_steps, library, brief.inducer, brief.encoding, cond_mode
+                )
             else:
-                grn, log_prob, entropy = _rollout(policy, rng, max_steps, target, cond_mode)
-            reward = score_once(grn, behavior)
+                grn, log_prob, entropy = _rollout(policy, rng, max_steps, brief.encoding, cond_mode)
+            reward = score_once(grn, brief.behavior)
             log_probs.append(log_prob)
             log_rewards.append(beta * torch.log(torch.tensor(max(reward, 0.0) + floor)))
             entropies.append(entropy)
@@ -448,25 +380,24 @@ def train_conditioned(
 
 def sample_conditioned(
     policy: GraphPolicyNet,
-    target: TargetResponse,
+    brief: Brief,
     n: int,
     *,
     max_steps: int = 8,
     seed: int = 0,
     cond_mode: str = "node",
     library: ComponentLibrary | None = None,
-    inducer: str = "aTc",
 ) -> list[GRN]:
-    """Sample ``n`` terminal circuits from a trained graph policy, conditioned on ``target`` (no gradient).
-    ``cond_mode`` must match the mode the policy was trained with; ``library`` must match too if grounded."""
+    """Sample ``n`` terminal circuits from a trained graph policy for one brief (no gradient). ``cond_mode``
+    must match the mode the policy was trained with, and ``library`` must match too if grounded."""
     torch.manual_seed(seed)
     rng = random.Random(seed)
     out: list[GRN] = []
     with torch.no_grad():
         for _ in range(n):
             if library is not None:
-                grn, _, _ = _grounded_rollout(policy, rng, max_steps, library, inducer, target, cond_mode)
+                grn, _, _ = _grounded_rollout(policy, rng, max_steps, library, brief.inducer, brief.encoding, cond_mode)
             else:
-                grn, _, _ = _rollout(policy, rng, max_steps, target, cond_mode)
+                grn, _, _ = _rollout(policy, rng, max_steps, brief.encoding, cond_mode)
             out.append(grn)
     return out

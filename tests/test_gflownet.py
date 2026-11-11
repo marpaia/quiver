@@ -6,12 +6,12 @@ pytest.importorskip("torch")
 pytest.importorskip("loica")
 
 from quiver.learn.gflownet import PolicyNet, discovery_stream, sample_terminals, train  # noqa: E402
-from quiver.objective import TargetResponse, dose_response_match  # noqa: E402
+from quiver.objective import inducible_response  # noqa: E402
 
 
 @pytest.mark.sim
 def test_gflownet_trains_and_samples_valid_terminals() -> None:
-    behavior = dose_response_match(TargetResponse("GFP", ec50=1.0, dynamic_range=100.0))
+    behavior = inducible_response("GFP")
     policy = train(behavior, steps=3, batch=4, max_steps=5, seed=0)
     assert isinstance(policy, PolicyNet)
     terminals = sample_terminals(policy, 5, max_steps=5, seed=1)
@@ -24,7 +24,7 @@ def test_gflownet_trains_and_samples_valid_terminals() -> None:
 @pytest.mark.sim
 def test_sample_terminals_is_seed_deterministic() -> None:
     # The seed controls the sample: identical seeds reproduce it (idempotent), distinct seeds redraw it.
-    behavior = dose_response_match(TargetResponse("GFP", ec50=1.0, dynamic_range=100.0))
+    behavior = inducible_response("GFP")
     policy = train(behavior, steps=3, batch=4, max_steps=5, seed=0)
     first = [g.topology_hash() for g in sample_terminals(policy, 6, max_steps=5, seed=7)]
     same = [g.topology_hash() for g in sample_terminals(policy, 6, max_steps=5, seed=7)]
@@ -35,7 +35,7 @@ def test_sample_terminals_is_seed_deterministic() -> None:
 
 @pytest.mark.sim
 def test_discovery_stream_is_scored_and_deterministic() -> None:
-    behavior = dose_response_match(TargetResponse("GFP", ec50=1.0, dynamic_range=100.0))
+    behavior = inducible_response("GFP")
     kw = dict(seed=0, steps=3, batch=4, max_steps=5, n_samples=6, tune_steps=1)
     stream = discovery_stream(behavior, **kw)
     assert len(stream) == 6

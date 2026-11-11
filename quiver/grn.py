@@ -219,6 +219,63 @@ class GRN:
         )
         return json.dumps({"nodes": canon_nodes, "edges": canon_edges}, sort_keys=True, separators=(",", ":"))
 
+    def to_loica(self) -> object:
+        """Compile this design to a LOICA ``GeneticNetwork``: draw it, simulate it, or export it to SBOL."""
+        from quiver.objective.simulate import to_loica
+
+        return to_loica(self)
+
+    def draw(self) -> str:
+        """This circuit's layout as a Mermaid flowchart."""
+        from quiver.draw import to_mermaid
+
+        return to_mermaid(self)
+
+    def effective(self) -> frozenset[str]:
+        """The ids of nodes that can influence a reporter.
+
+        A structural move can leave a branch that no longer reaches the output, and such a branch costs
+        real reagents while changing nothing. Everything outside this set is dead weight in the build.
+        """
+        reporters = {node.id for node in self.nodes if node.kind == "reporter"}
+        upstream: dict[str, list[str]] = {node.id: [] for node in self.nodes}
+        for edge in self.edges:
+            if edge.target in upstream:
+                upstream[edge.target].append(edge.source)
+        reached, stack = set(reporters), list(reporters)
+        while stack:
+            for source in upstream.get(stack.pop(), ()):
+                if source not in reached:
+                    reached.add(source)
+                    stack.append(source)
+        return frozenset(reached)
+
+    def pruned(self) -> GRN:
+        """This circuit with every node that cannot influence a reporter removed.
+
+        Dropping them cannot change any reporter's behavior --- nothing downstream reads them --- so the
+        delivered design is the part of the circuit that does the work, and its diagram, bill of parts and
+        simulation all describe the same thing.
+
+        Supplements are kept whether or not anything reads them, because an input is part of the experiment
+        rather than of the circuit: a design that ignores its inducer should report a flat response, not
+        quietly become a circuit with no input.
+        """
+        live = self.effective() | {n.id for n in self.nodes if n.kind == "supplement"}
+        if len(live) == len(self.nodes):
+            return self
+        return replace(
+            self,
+            nodes=tuple(node for node in self.nodes if node.id in live),
+            edges=tuple(e for e in self.edges if e.source in live and e.target in live),
+        )
+
+    def parts_list(self) -> tuple[str, ...]:
+        """The Component ids this design is built from, in node order, counting only parts that reach the
+        reporter; empty for an abstract circuit."""
+        live = self.effective()
+        return tuple(n.component_id for n in self.nodes if n.component_id is not None and n.id in live)
+
     def to_dict(self) -> dict[str, object]:
         return {
             "version": 1,
